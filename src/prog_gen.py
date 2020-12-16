@@ -9,17 +9,26 @@ import re
 import copy
 import time
 import math
+import csv
 
 from fp_funcs import *
 
-search_steps = 100
-input_samp_sz = 10000    
-otc_samp_sz = 1000
+# TODO TODO TODO refactor and doc!!!!
 
-inputs_bound_l = -1e6
-inputs_bound_h = 1e6 
+
+search_steps = 100
+input_samp_sz = 1000    
+otc_samp_sz = 500
+
+inputs_mag = 6
+
 
 precisions = [32, 64, 80] 
+prec_map ={32:0,
+           64:1,
+           80:2}
+
+
 p_precisions = [0.6, 0.3, 0.1]
 p_tune_max = 0.5
 p_tune_min = 0.5
@@ -33,20 +42,20 @@ is_binary = {'ADD': True,
              'SIN': False,
              'COS': False}
 
-soft_constraints = {'max_edges':30, 'max_out_degree':3, 'max_consts':4}
+soft_constraints = {'max_edges':30, 'max_out_degree':4, 'max_consts':4}
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
 
-dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 2.0, 2.0]     
+dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]     
 
-dir_p_edges = [12.0, 6.0, 1.0, 0.5] 
+dir_p_edges = [12.0, 1.0, 0.5, 0.1] 
 
-# NOTE good distribution!
 #dir_p_edges = [12.0, 6.0, 1.0, 0.5] 
+#dir_p_edges = [12.0, 1.0, 0.5, 0.1] 
 
 
-#NOTE by the backward generation process, the maximum path between any two nodes sharing an edge is small...
+#NOTE by the backward generation process, the maximum path between any two nodes sharing an edge is often small...
 
 # categorical sampler
 # sampling returns (sample_class, sample_id)
@@ -174,10 +183,27 @@ def conn_src(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
             return   
 
 #
-def print_for_gviz(edges):
-    for e in edges:
-        print(str(e[0]) + "->" + str(e[1]) + ";")
+def print_for_gviz(prog_g, exec_trace, precs):
+    edges = prog_g.edges()
 
+    counter = 0
+    node_ids = {}
+    for node in netwx.topological_sort(prog_g):    
+        node_ids[node] = counter
+        counter += 1              
+ 
+    for e in edges:
+        if not(exec_trace[node_ids[e[0]]][1] == 0 and not(exec_trace[node_ids[e[1]]][1] == 0)):                 
+            print(str(e[0])+"_"+str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
+
+        elif not(exec_trace[node_ids[e[0]]][1] == 0):
+                print(str(e[0]) + "_" + str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ ";")
+ 
+        elif not(exec_trace[node_ids[e[1]]][1] == 0):
+                print(str(e[0]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
+
+        else: 
+            print(str(e[0]) + "->" + str(e[1])+ ";")
 
 opcodes = {'CONST':0,
            'ADD':1,
@@ -220,6 +246,32 @@ gen_src = {'op_new': conn_new_op,
            'const_new': conn_new_const,
            'const_exist': conn_exist_const}
 
+
+#
+def gen_exec_list(prog_g):
+
+    # gen exec order from traversal   
+    visit_order = [node for node in netwx.topological_sort(prog_g)]    
+
+    # change node_ids to visit_idxs for trace
+    counter   = 0
+    visit_idx = {}
+    for node in visit_order:
+        visit_idx[node] = counter
+        counter       += 1   
+ 
+    exec_list = []
+   
+    for node_idx in range(len(visit_order)):
+        curr_node = visit_order[node_idx]
+        node_type = prog_g.nodes()[curr_node]['node_type']
+
+        parents     = [parent for parent in prog_g.predecessors(curr_node)]
+        parent_idxs = [visit_idx[parent] for parent in parents]
+
+        operation = emit_op[node_type](node_idx, node_type, parent_idxs) 
+        exec_list.append(operation)  
+    return exec_list
 
 
 #
@@ -302,32 +354,12 @@ def gen_prog(samplers, soft_constraints):
                 if not(conn_exist_op(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)):                         
                     conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
                  
-    # FIXME
-    #print_for_gviz(prog_g.edges())
 
-    # gen exec order from traversal
-    visit_order = [node for node in netwx.topological_sort(prog_g)]    
 
-    # change node_ids to visit_idxs for trace
-    counter   = 0
-    visit_idx = {}
-    for node in visit_order:
-        visit_idx[node] = counter
-        counter       += 1   
- 
-    exec_list = []
-   
-    for node_idx in range(len(visit_order)):
-        curr_node = visit_order[node_idx]
-        node_type = prog_g.nodes()[curr_node]['node_type']
-
-        parents     = [parent for parent in prog_g.predecessors(curr_node)]
-        parent_idxs = [visit_idx[parent] for parent in parents]
-
-        operation = emit_op[node_type](node_idx, node_type, parent_idxs) 
-        exec_list.append(operation)           
+    exec_list = gen_exec_list(prog_g)
+         
   
-    return exec_list
+    return exec_list, prog_g
 
 
 
@@ -345,13 +377,29 @@ def gen_inputs(prog, samp_sz, bound_low, bound_high):
        inputs.append(samp_inputs)
    return inputs
 
-# samples seperately at each magnitude
-def gen_stratified_inputs(prog, samp_sz, bound_low, bound_high):
-    inputs  = []
-    max_mag = math.ceil(math.log10(bound_high)) 
-    samps_per_mag = samp_sz / max_mag
 
-    #FIXME FIXME FIXME
+# samples seperately at each magnitude
+def gen_stratified_inputs(prog, samp_sz, max_mag):
+   inputs  = []
+
+   samps_per_mag = int(samp_sz / (max_mag * 2))
+
+   for mag in range(-max_mag + 1, max_mag):
+
+       print("**mag " + str(mag))
+
+       for samp in range(samps_per_mag):
+           samp_inputs = []
+
+           for insn in prog:                            
+               is_const = True if insn[1] == 0 else False 
+               if (is_const):
+                   samp_inputs.append(rand.uniform(-1.0 * (10.0**mag), 10.0**mag))
+               else:
+                   samp_inputs.append(0.0)
+           inputs.append(samp_inputs)
+
+   return inputs   
         
 
     
@@ -477,7 +525,7 @@ def sort_otcs_by_score(otcs):
     return sorted_otcs
 
 #
-def progress_tuneup_strat(trace, inputs, max_prec_otc, steps):
+def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
     cand_otcs   = [ gen_spec_otc(exec_trace,precisions[0]) ] 
 
     shad_results = [sim_prog(exec_trace, _input, max_prec_otc) for _input in inputs]
@@ -559,6 +607,7 @@ def are_same_otcs(otc1, otc2):
 def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
     print("\tgen rand cand otcs")
     cand_otcs   = [ gen_rand_otc(exec_trace) for samp in range(samp_sz) ] 
+     
 
     print("\tsorting cand otcs by scores")
     cand_otcs   = sort_otcs_by_score(cand_otcs)
@@ -575,8 +624,8 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
   
     optimal_otc = None
     for otc_idx in range(len(cand_otcs)): 
-        if (otc_idx % 10 == 0):
-            print(otc_idx)
+        if (otc_idx % 20 == 0):
+            print("\tsearching otc " + str(otc_idx))
 
         otc = cand_otcs[otc_idx]
 
@@ -598,17 +647,17 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
         optimal_otc = otc
         break
 
-
+    #
+    # keep tuning down until no new solution
+    #
     if not (optimal_otc is None):
         print("\ninitial sol")
         print(np.sum(optimal_otc))
 
-        # keep tuning down until no new solution
         last_sol = optimal_otc                  
         cands   = expand_otcs_down([last_sol], 1.0)    
         phase   = 0 
 
-        #FIXME FIXME              
         while(len(cands) > 0): 
             curr_sol = None    
 
@@ -662,15 +711,16 @@ def hybrid_strat(exec_trace, inputs, max_prec_otc):
         return None 
 
     sol = rand_subset_strat(exec_trace, inputs, max_prec_otc, otc_samp_sz)
+    
     return sol
 
 #
 def search_opt_otc(exec_trace, samplers):     
     # generate inputs/precision and perform search 
-    inputs       = gen_inputs(exec_trace, input_samp_sz, inputs_bound_l, inputs_bound_h)
-    max_prec_otc = gen_spec_otc(exec_trace,precisions[-1])
+    #inputs = gen_inputs(exec_trace, input_samp_sz, inputs_bound_l, inputs_bound_h)
+    inputs = gen_stratified_inputs(exec_trace, input_samp_sz, inputs_mag)
 
-    #
+    max_prec_otc = gen_spec_otc(exec_trace,precisions[-1])
 
     #sol = rand_subset_strat(exec_trace, inputs, max_prec_otc, otc_samp_sz)
     #sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, search_steps)
@@ -678,14 +728,87 @@ def search_opt_otc(exec_trace, samplers):
 
     if sol is None:
         print("\n**failed to find sol")
-        return None
+        return None, None
 
     print("\n\t**found optimal")
     print(str(np.sum(sol)))
 
-    return sol
+    return sol, inputs
 
-             
+# gets the # of types between solution and initial
+def otc_dist(sol_otc, init_otc, shift=0):
+    dists = []
+    for insn_idx in range(len(init_otc)):
+        dists.append(sol_otc[insn_idx] - init_otc[insn_idx] + shift)
+    return dists
+
+#
+def map_precisions(otc):
+    mapped = []
+    for prec in otc:
+        mapped.append(prec_map[prec])
+    return mapped
+
+
+
+# generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
+def gen_ds(exec_trace, solution, inputs, sz):
+    feats  = []
+    labels = []
+            
+    gt_otc = gen_spec_otc(exec_trace, precisions[-1])  
+    shad_results = []
+
+    for ins in inputs:
+        shad_results.append(sim_prog(exec_trace, ins, gt_otc)) 
+
+    input_sz = len(inputs)        
+
+    for i_sol in range(sz):
+        print("\tcreating init sol feat " + str(i))
+
+        cand = None       
+        valid = False
+
+        while not(valid):
+            cand = gen_rand_otc(exec_trace)    
+    
+            for i_idx in range(input_sz):
+                result_cand = sim_prog(exec_trace, inputs[i_idx], cand) 
+    
+                if result_cand == None:
+                    break
+    
+                error = relative_error(result_cand, shad_results[i_idx])    
+                if error > err_thresh:                 
+                    break
+            valid = True
+
+        feats.append(map_precisions(cand))
+        labels.append(otc_dist(map_precisions(solution), map_precisions(cand), shift=len(precisions)-1))
+
+    return feats, labels         
+
+#
+def emit_ds(path, traces, feats, labels, feats_per_prog):
+  
+    with open(path, 'w') as f_hand:
+        f_writer = csv.writer(f_hand, delimiter=',')
+
+        header = ['nid','opcode','src_l','src_r','init_prec','tune_rec']
+        f_writer.writerow(header)
+
+        prog_count = len(traces) 
+
+        for prog_idx in range(prog_count):             
+            trace_len = len(traces[prog_idx])
+
+            for otc_idx in range(feats_per_prog):
+
+                for insn_idx in range(trace_len):                                       
+                    f_writer.writerow(traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + [labels[prog_idx][otc_idx][insn_idx]])                
+                f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 2)])     
+                      
 #    
 if __name__ == '__main__':
 
@@ -698,22 +821,62 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 1
+    prog_count = 2
+
+    exec_traces = []
+    solutions   = []
+    inputs      = []
 
     for i in range(prog_count):
         print("\n**prog " + str(i))
-        feat = None
-        while (feat is None):
-            exec_trace = gen_prog(samplers, soft_constraints)        
-            feat = search_opt_otc(exec_trace, samplers)
-        
+        sol_otc = None
+        candidates = None
+
+        exec_trace = None
+        sol_otc = None
+        samp_inputs  = None
+
+        while (sol_otc is None):
+            exec_trace, prog_g  = gen_prog(samplers, soft_constraints)        
+
+            sol_otc, samp_inputs = search_opt_otc(exec_trace, samplers)
+
+        exec_traces.append(exec_trace)
+        solutions.append(sol_otc)
+        inputs.append(samp_inputs)         
+ 
     end_t = time.time()
 
+    #print_for_gviz(prog_g, exec_trace, sol_otc)
     print("\n** " + str(prog_count) + " done in " + str(end_t - start_t)) 
                  
+    #NOTE number of a priori input OTCs are generated
+    feats_per_prog = 5 
+    all_feats = []
+    all_labels = [] 
+
+    for prog_idx in range(prog_count):    
+        print("gen feats for prog " + str(prog_idx))
+
+        feats, labels = gen_ds(exec_traces[prog_idx], solutions[prog_idx], inputs[prog_idx], feats_per_prog) 
+        all_feats.append(feats)
+        all_labels.append(labels)
 
 
-    
+    path = sys.argv[1]
+    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
