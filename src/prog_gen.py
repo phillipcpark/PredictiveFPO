@@ -13,8 +13,6 @@ import csv
 
 from fp_funcs import *
 
-# TODO TODO TODO refactor and doc!!!!
-
 
 search_steps = 100
 input_samp_sz = 1000    
@@ -42,12 +40,12 @@ is_binary = {'ADD': True,
              'SIN': False,
              'COS': False}
 
-soft_constraints = {'max_edges':30, 'max_out_degree':4, 'max_consts':4}
+soft_constraints = {'max_edges':35, 'max_out_degree':3, 'max_consts':4}
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
 
-dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]     
+dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 2.0, 2.0]     
 
 dir_p_edges = [12.0, 1.0, 0.5, 0.1] 
 
@@ -850,7 +848,7 @@ if __name__ == '__main__':
     #print_for_gviz(prog_g, exec_trace, sol_otc)
     print("\n** " + str(prog_count) + " done in " + str(end_t - start_t)) 
                  
-    #NOTE number of a priori input OTCs are generated
+    #number of a priori input OTCs are generated
     feats_per_prog = 5 
     all_feats = []
     all_labels = [] 
