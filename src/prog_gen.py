@@ -14,12 +14,11 @@ import csv
 from fp_funcs import *
 
 
-search_steps = 100
-input_samp_sz = 1000    
-otc_samp_sz = 500
+search_steps = 1 #for progressive tuning
+input_samp_sz = 5000    
+otc_samp_sz = 100
 
 inputs_mag = 6
-
 
 precisions = [32, 64, 80] 
 prec_map ={32:0,
@@ -40,15 +39,17 @@ is_binary = {'ADD': True,
              'SIN': False,
              'COS': False}
 
-soft_constraints = {'max_edges':35, 'max_out_degree':3, 'max_consts':4}
+soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
+#soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
 
-edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
+
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
-
 dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 2.0, 2.0]     
 
-dir_p_edges = [12.0, 1.0, 0.5, 0.1] 
+edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
+dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
 
+#dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
 #dir_p_edges = [12.0, 6.0, 1.0, 0.5] 
 #dir_p_edges = [12.0, 1.0, 0.5, 0.1] 
 
@@ -384,8 +385,6 @@ def gen_stratified_inputs(prog, samp_sz, max_mag):
 
    for mag in range(-max_mag + 1, max_mag):
 
-       print("**mag " + str(mag))
-
        for samp in range(samps_per_mag):
            samp_inputs = []
 
@@ -524,12 +523,14 @@ def sort_otcs_by_score(otcs):
 
 #
 def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
+
+    # start with all lowest precision
     cand_otcs   = [ gen_spec_otc(exec_trace,precisions[0]) ] 
 
     shad_results = [sim_prog(exec_trace, _input, max_prec_otc) for _input in inputs]
     for result in shad_results:
         if (result == None):
-            print("\n\n****shadow caused FP exception; no solution for program")
+            print("\t****shadow caused FP exception; no solution for program")
             return False
 
     optimal_otc= None
@@ -540,35 +541,24 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
         print("\n**eval " + str(len(cand_otcs)) + " candidates")        
         for otc in cand_otcs: 
             invalid = False     
-            errors  = 0.0
 
             for input_idx in range(len(inputs)): 
                 result_cand = sim_prog(exec_trace, inputs[input_idx], otc) 
 
                 if result_cand == None:
-                    print("\t\tcandidate cause FP exception")
                     invalid = True
                     break
                 error = abs(relative_error(result_cand, shad_results[input_idx]))
-                errors += error
 
                 if error > err_thresh:                 
                     invalid = True
-
-                    if (not input_idx == 0):
-                        avg_err = errors / float(input_idx)
-
-                        if avg_err < best_err:
-                            best_err = avg_err
-                            print("best err " + str(best_err))
-
                     break
+
             if (invalid):
                 continue  
 
             # valid, is optimal otc
             optimal_otc = otc
-            print("\toptimal total, avg err " + str(errors) + ", " + str(errors/ float(len(inputs))))
             break
 
         if (optimal_otc is None and steps > 1):
@@ -581,8 +571,9 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
 
             if len(cand_otcs) == 0:
                 print("\t**no candidates after expansion")
-                return None
+                return None        
         step += 1
+                      
     return optimal_otc
 
 #
@@ -615,14 +606,14 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
 
     for result in shad_results:
         if (result == None):
-            print("\n\n****shadow caused FP exception; no soltion for program")
+            print("\n****shadow caused FP exception; no soltion for program")
             return False
 
     print("\tsearching over candidates")
   
     optimal_otc = None
     for otc_idx in range(len(cand_otcs)): 
-        if (otc_idx % 20 == 0):
+        if (otc_idx % 50 == 0):
             print("\tsearching otc " + str(otc_idx))
 
         otc = cand_otcs[otc_idx]
@@ -649,7 +640,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
     # keep tuning down until no new solution
     #
     if not (optimal_otc is None):
-        print("\ninitial sol")
+        print("\tinitial sol")
         print(np.sum(optimal_otc))
 
         last_sol = optimal_otc                  
@@ -660,7 +651,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
             curr_sol = None    
 
             cands = sort_otcs_by_score(cands) 
-            print("\n\teval " + str(len(cands)) + " improved solutions")
+            print("\teval " + str(len(cands)) + " improved solutions")
              
             for cand_idx in range(len(cands)):
                 cand = cands[cand_idx]
@@ -694,7 +685,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
 
         if not(last_sol is optimal_otc):
             optimal_otc = last_sol                
-            print("\n\n**optimal " + str(optimal_otc))    
+            print("\t**optimal " + str(optimal_otc))    
 
     return optimal_otc
 
@@ -705,7 +696,7 @@ def hybrid_strat(exec_trace, inputs, max_prec_otc):
     sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, 1)
 
     if not(sol is None):      
-        print("\n**solution was trivial, skipping program")
+        print("\t**solution was trivial, skipping program")
         return None 
 
     sol = rand_subset_strat(exec_trace, inputs, max_prec_otc, otc_samp_sz)
@@ -725,10 +716,10 @@ def search_opt_otc(exec_trace, samplers):
     sol = hybrid_strat(exec_trace, inputs, max_prec_otc)
 
     if sol is None:
-        print("\n**failed to find sol")
+        print("\t\t**failed to find sol")
         return None, None
 
-    print("\n\t**found optimal")
+    print("\t\t**found optimal")
     print(str(np.sum(sol)))
 
     return sol, inputs
@@ -763,7 +754,8 @@ def gen_ds(exec_trace, solution, inputs, sz):
     input_sz = len(inputs)        
 
     for i_sol in range(sz):
-        print("\tcreating init sol feat " + str(i))
+        if (i_sol % 20 == 0):
+            print("\tcreating init sol feat " + str(i_sol))
 
         cand = None       
         valid = False
@@ -789,11 +781,12 @@ def gen_ds(exec_trace, solution, inputs, sz):
 
 #
 def emit_ds(path, traces, feats, labels, feats_per_prog):
-  
-    with open(path, 'w') as f_hand:
+    ds_path = path 
+ 
+    with open(ds_path, 'w') as f_hand:
         f_writer = csv.writer(f_hand, delimiter=',')
 
-        header = ['nid','opcode','src_l','src_r','init_prec','tune_rec']
+        header = ['gid', 'nid','opcode','src_l','src_r','init_prec','tune_rec']
         f_writer.writerow(header)
 
         prog_count = len(traces) 
@@ -802,10 +795,10 @@ def emit_ds(path, traces, feats, labels, feats_per_prog):
             trace_len = len(traces[prog_idx])
 
             for otc_idx in range(feats_per_prog):
-
                 for insn_idx in range(trace_len):                                       
-                    f_writer.writerow(traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + [labels[prog_idx][otc_idx][insn_idx]])                
-                f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 2)])     
+                    f_writer.writerow([prog_idx] + traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + \
+                                      [labels[prog_idx][otc_idx][insn_idx]])                
+                f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 3)])     
                       
 #    
 if __name__ == '__main__':
@@ -819,14 +812,14 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 2
+    prog_count = 500
 
     exec_traces = []
     solutions   = []
     inputs      = []
 
     for i in range(prog_count):
-        print("\n**prog " + str(i))
+        print("\n******\n**prog\n****** " + str(i))
         sol_otc = None
         candidates = None
 
@@ -836,30 +829,43 @@ if __name__ == '__main__':
 
         while (sol_otc is None):
             exec_trace, prog_g  = gen_prog(samplers, soft_constraints)        
-
             sol_otc, samp_inputs = search_opt_otc(exec_trace, samplers)
+
+        if not(np.sum(sol_otc) - 0.0 > np.finfo(np.float64).eps):
+            err_hand = None
+            try:
+                err_hand = open("err_log.txt", 'a')
+                err_hand.write("all-SP generator error")
+            except:
+                err_hand = open("err_log.txt", 'w')
+
+            err_hand.write("all-SP generator error")                
+            err_hand.close() 
+            print("\t**sol otc was, SOMEHOW, all-sp")    
+            continue
+
+        #FIXME
+        #print_for_gviz(prog_g, exec_trace, sol_otc)
 
         exec_traces.append(exec_trace)
         solutions.append(sol_otc)
         inputs.append(samp_inputs)         
  
     end_t = time.time()
-
-    #print_for_gviz(prog_g, exec_trace, sol_otc)
+            
     print("\n** " + str(prog_count) + " done in " + str(end_t - start_t)) 
-                 
+                    
     #number of a priori input OTCs are generated
-    feats_per_prog = 5 
+    feats_per_prog = 50 
     all_feats = []
     all_labels = [] 
 
-    for prog_idx in range(prog_count):    
+    for prog_idx in range(len(exec_traces)):    
         print("gen feats for prog " + str(prog_idx))
 
         feats, labels = gen_ds(exec_traces[prog_idx], solutions[prog_idx], inputs[prog_idx], feats_per_prog) 
         all_feats.append(feats)
         all_labels.append(labels)
-
 
     path = sys.argv[1]
     emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)
