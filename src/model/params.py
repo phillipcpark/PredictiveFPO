@@ -1,18 +1,22 @@
 from copy import deepcopy
 
 BAT_SZ     = 128 #32
-EPOCHS     = 64 #256
-H_DIM      = 32
-TR_DS_PROP = 0.8
+EPOCHS     = 32 #256
+H_DIM      = 48
+TR_DS_PROP = 0.66
 L_RATE     = 0.05
 
 CLASSES = 5
-LAYERS  = 1 #5
+LAYERS  = 2
 
 NUM_ATTRIBUTES = 7
 GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
 
+err_thresh = 0.0000001
+
+
 precs = {32:0, 64:1, 80:2}
+precs_inv = {0:32, 1:64, 2:80}
 
 ops   = {'CONST':0,\
          'ADD':1, \
@@ -36,4 +40,7 @@ for op in ops.keys():
         curr_enc.pop()
 
     OP_ENC[ops[op]] = curr_op_encs
+
+
+
 

@@ -25,12 +25,12 @@ class fptc_gnn(nn.Module):
         if ('msgs_redux' in nodes.data.keys()):             
             concat_feats = th.cat((node_embeds, nodes.data['msgs_redux'].reshape((node_count, self.hidden_dim))), -1)
 
-            #node_embeds  = th.tanh(self.embed_node[0](concat_feats))
-            node_embeds  = th.relu(self.embed_node[0](concat_feats))
+            node_embeds  = th.tanh(self.embed_node[0](concat_feats))
+            #node_embeds  = th.relu(self.embed_node[0](concat_feats))
 
             for l in range(1, LAYERS):
-                #node_embeds = th.tanh(self.embed_node[l](node_embeds))
-                node_embeds = th.relu(self.embed_node[l](node_embeds))
+                node_embeds = th.tanh(self.embed_node[l](node_embeds))
+                #node_embeds = th.relu(self.embed_node[l](node_embeds))
 
 
         return {'node_embeds': node_embeds}
@@ -53,13 +53,14 @@ class fptc_gnn(nn.Module):
 
         else:
             msgs_concat = nodes.mailbox['msgs'].reshape((node_count, 1, 2*self.hidden_dim))
-            #msgs_redux  = th.tanh(self.mp_binary[0](msgs_concat))
-            msgs_redux  = th.relu(self.mp_binary[0](msgs_concat))
+
+            msgs_redux  = th.tanh(self.mp_binary[0](msgs_concat))
+            #msgs_redux  = th.relu(self.mp_binary[0](msgs_concat))
 
 
             for l in range(1, LAYERS):
-                #msgs_redux = th.tanh(self.mp_unary[l](msgs_redux))
-                msgs_redux = th.relu(self.mp_unary[l](msgs_redux))
+                msgs_redux = th.tanh(self.mp_unary[l](msgs_redux))
+                #msgs_redux = th.relu(self.mp_unary[l](msgs_redux))
 
 
 
@@ -76,6 +77,6 @@ class fptc_gnn(nn.Module):
         act     = nn.Softmax(dim=-1)
         predict = act(th.sigmoid(self.predict(graph.ndata['node_embeds'])))
                   
-        return predict
+        return predict, topo_order
 
 
