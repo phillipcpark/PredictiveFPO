@@ -12,8 +12,7 @@ from mpmath import mp
 #    -prec sets global context; not thread-safe 
 #    -previous context is not restored as context is always explicitly 
 #     specified before each simulator step
-
-# 
+ 
 def p_const(val, prec):
     mp.prec = prec
     return val
@@ -58,4 +57,10 @@ p_functions = \
     6: p_cos
 }
 
- 
+opcodes = {'CONST':0,
+           'ADD':1,
+           'SUB':2,
+           'MUL':3,
+           'DIV':4,
+           'SIN':5,
+           'COS':6 } 

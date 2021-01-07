@@ -1,19 +1,25 @@
 from copy import deepcopy
 
-BAT_SZ     = 128 #32
-EPOCHS     = 32 #256
-H_DIM      = 48
-TR_DS_PROP = 0.66
-L_RATE     = 0.05
+BAT_SZ     = 128
+EPOCHS     = 32
+H_DIM      = 32
+TR_DS_PROP = 0.8
+VAL_DS_PROP = 0.1
+
+LAYERS = 5
+
+L_RATE = 0.1
 
 CLASSES = 5
-LAYERS  = 2
+IGNORE_CLASS = 6
 
 NUM_ATTRIBUTES = 7
 GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
 
-err_thresh = 0.0000001
+err_thresh = 0.00001
 
+input_samp_sz = 5000    
+inputs_mag = 6
 
 precs = {32:0, 64:1, 80:2}
 precs_inv = {0:32, 1:64, 2:80}
