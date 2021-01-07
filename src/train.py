@@ -249,7 +249,7 @@ def treval_fptc_gnn():
     rev_graphs = []
 
     #FIXME FIXME
-    example_count = 16 #2048
+    example_count = 1024 #2048
     ex_errs = []
 
     # difference in prec % after tuning
