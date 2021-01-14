@@ -13,6 +13,7 @@ import csv
 
 from mpmath import mp
 from fp_funcs import *
+from params import *
 
 # samples seperately at each magnitude
 def gen_stratified_inputs(prog, samp_sz, max_mag):
@@ -87,7 +88,11 @@ def sort_otcs_by_score(otcs):
     
     return sorted_otcs
 
-
+#
+def gen_rand_otc(sz):
+    otc = [rand.choice(np.arange(len(precs.keys()))) for op in range(sz)]
+    return otc
+    
 
 
                       

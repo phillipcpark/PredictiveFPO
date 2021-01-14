@@ -15,25 +15,25 @@ from mpmath import mp
  
 def p_const(val, prec):
     mp.prec = prec
-    return val
+    return mp.mpf(val)
 
 def p_add(src_l, src_r, prec):
     mp.prec = prec
-    return src_l+src_r
+    return mp.mpf(src_l+src_r)
 
 def p_sub(src_l, src_r, prec):
     mp.prec = prec
-    return src_l-src_r        
+    return mp.mpf(src_l-src_r)      
 
 def p_mul(src_l, src_r, prec):
     mp.prec = prec
-    return src_l*src_r          
+    return mp.mpf(src_l*src_r)         
 
 def p_div(src_l, src_r, prec):
     mp.prec = prec
 
     try:
-        return src_l/src_r         
+        return mp.mpf(src_l/src_r)         
     except:
         return None
    

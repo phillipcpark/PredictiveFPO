@@ -17,6 +17,7 @@ from collections import Counter
 
 from tr_helper import *
 from fp_funcs import *
+from apps import *
 
 
 #
@@ -181,10 +182,14 @@ def treval_fptc_gnn():
     bwd_model = bwd_gnn_resid(OP_ENC_DIM, H_DIM)
     comb_model = comb_state_resid(OP_ENC_DIM, H_DIM)
 
+    #fwd_model = fwd_gnn_dense(OP_ENC_DIM, H_DIM)
+    #bwd_model = bwd_gnn_dense(OP_ENC_DIM, H_DIM)
+    #comb_model = comb_state_dense(OP_ENC_DIM, H_DIM)
+
     optimizer = th.optim.Adagrad(list(fwd_model.parameters()) + list(bwd_model.parameters()) + list(comb_model.parameters()), lr=L_RATE)
     #optimizer = th.optim.Adagrad(bwd_model.parameters(), lr=L_RATE)
 
-   
+
     for epoch in range(EPOCHS):
         ep_loss = []
         ep_acc  = []
@@ -225,12 +230,11 @@ def treval_fptc_gnn():
             #    sys.exit(0)
 
                 
-            class_weights = get_class_weights(labels_bat) 
+            #class_weights = get_class_weights(labels_bat) 
 
-            #if (epoch % 2 == 0):
-            class_weights = None
+            #comp_loss = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_CLASS, size_average=True) 
+            comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
 
-            comp_loss = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_CLASS, size_average=True) 
             loss      = comp_loss(predicts, th.tensor(labels_bat))
          
             ep_loss.append(loss.item())
@@ -240,17 +244,46 @@ def treval_fptc_gnn():
             optimizer.step()
             #print("**Epoch {:05d} | Loss {:.16f} |".format(epoch, loss.item()))
 
-        # TODO validation set
-        
+        # validation set
+        graphs = []
+        labels_bat = []
+        for ex_idx in range(BAT_COUNT * BAT_SZ, BAT_COUNT * BAT_SZ + VALID_SZ):         
+            glob_idx = shuff_idxs[ex_idx]
+            g_idx = graph_idxs[glob_idx]
 
-        print("epoch " + str(epoch) + " loss: " + str(np.mean(ep_loss)) + ", tr_acc: " + str(np.mean(ep_acc)))
+            ex_feats = feats[glob_idx]
+            ex_graph = create_graph(graph_edges[g_idx],\
+                                    [OP_ENC[feat[0]][feat[1]] for feat in ex_feats],\
+                                    unary_masks[g_idx])
+            
+            labels_bat += labels[glob_idx]         
+            graphs.append(ex_graph)
+
+        graphs_bat = dgl.batch(graphs) 
+        rev_bat = dgl.batch([g.reverse(share_ndata=True, share_edata=True) for g in graphs])
+
+        fwd_predicts, _ = fwd_model(graphs_bat)
+        bwd_predicts, _ = bwd_model(rev_bat)
+        predicts        = comb_model(fwd_predicts, bwd_predicts)
+
+        comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
+
+        val_loss      = comp_loss(predicts, th.tensor(labels_bat))
+        val_acc = pred_acc(predicts, th.tensor(labels_bat))
+
+        if (epoch == 0):
+            print("\nepoch,tr_loss,tr_acc,val_loss,val_acc")   
+                
+        print(str(epoch) + "," + str(np.mean(ep_loss)) + "," + str(np.mean(ep_acc)) + \
+              "," + str(val_loss.item()) + "," + str(val_acc))
 
     tst_graphs = []
     rev_graphs = []
 
     #FIXME FIXME
-    example_count = 1024 #2048
+    example_count = 1024
     ex_errs = []
+    all_errs = []
 
     # difference in prec % after tuning
     all_prec_freq_deltas = {32:[], 64:[], 80:[]}
@@ -265,7 +298,7 @@ def treval_fptc_gnn():
 
     tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
 
-    for ex_idx in range(BAT_COUNT*BAT_SZ, BAT_COUNT*BAT_SZ + example_count):         
+    for ex_idx in range(BAT_COUNT*BAT_SZ + VALID_SZ, BAT_COUNT*BAT_SZ + VALID_SZ + example_count):         
         glob_idx = shuff_idxs[ex_idx]
         g_idx    = graph_idxs[glob_idx]
         edges    = graph_edges[g_idx] 
@@ -281,16 +314,14 @@ def treval_fptc_gnn():
          
         fwd_embeds, fwd_top_ord = fwd_model(ex_graph) 
         bwd_embeds, bwd_top_ord = bwd_model(rev_g) 
-        predicts = comb_model(fwd_embeds, bwd_embeds)
+
+        #NOTE sigmoid pulled out from model
+        predicts = th.sigmoid(comb_model(fwd_embeds, bwd_embeds))
         #predicts = bwd_embeds
  
         # since softmax is taken out of model
         sm = nn.Softmax(dim=-1)
         predicts = sm(predicts)
-
-        for pred in predicts:
-            tune_counts[np.argmax(pred.detach().numpy())] += 1
-
 
         exec_list = []
         otc_orig       = []
@@ -318,19 +349,32 @@ def treval_fptc_gnn():
         inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
 
         errs = []
+        triv_errs = []
+
         gt_otc = gen_spec_otc(exec_list, precs_inv[2])
+        triv_otc = gen_spec_otc(exec_list, precs_inv[0])
 
         # discard test program if shadow not valid
         valid = True
         for ins in inputs:
             result = sim_prog(exec_list, ins, otc_tuned)
             shad_result = sim_prog(exec_list, ins, gt_otc) 
+            triv_result = sim_prog(exec_list, ins, triv_otc)
+
             err = relative_error(result, shad_result)
             errs.append(err)
+
+            triv_err = relative_error(triv_result, shad_result)
+            triv_errs.append(triv_err)
+
             if (shad_result == None):
                 valid = False
                 break
         if not (valid):
+            continue
+
+        # NOTE skip programs that have trivial solution for given threshold
+        if (np.amax(triv_errs) < err_thresh):
             continue
 
         if (np.mean(errs) < err_thresh):
@@ -366,6 +410,21 @@ def treval_fptc_gnn():
                 if (np.amax(errs) < err_thresh):
                     comp_succ_freq_deltas[k].append(float(tun_counts[k])/total - float(orig_counts[k])/total)    
                     comp_prec_improv.append( np.sum(otc_orig) - np.sum(otc_tuned) )
+
+                # FIXME FIXME FIXME
+                #else:
+                #    all_errs.append(errs)
+
+    # FIXME printing errs
+    #print("\n" + str(len(all_errs)))
+    #for _e in range(len(all_errs)):
+    #    print(str(_e) + ',', end='') 
+    #print("")
+
+    #for _e in range(len(all_errs[0])):
+    #    for e_idx in range(len(all_errs)):
+    #        print(str(all_errs[e_idx][_e]) + ",", end='')
+    #    print("")
     
     print("\n\t\t**proportion within thresh, on average across inputs " + str(float(avg_good_count) / float(all_count))) 
     print("\t\t**proportion within thresh, for all inputs " + str(float(all_good_count) / float(all_count))) 
@@ -394,25 +453,80 @@ def treval_fptc_gnn():
     rev_graphs_bat = dgl.batch(rev_graphs)
 
     tst_labels_bat = []
-    tst_labels = []
  
-    for ex_idx in range(BAT_COUNT*BAT_SZ, BAT_COUNT*BAT_SZ+example_count):
+    for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
         glob_idx = shuff_idxs[ex_idx]
         tst_labels_bat += labels[glob_idx]         
-        tst_labels.append(labels[glob_idx])
        
     tst_labels_bat = th.tensor(tst_labels_bat)
 
     fwd_embeds, _   = fwd_model(tst_graphs_bat) 
     bwd_embeds, _   = bwd_model(rev_graphs_bat)
-    predicts        = comb_model(fwd_embeds, bwd_embeds)  
+    predicts        = sm(th.sigmoid(comb_model(fwd_embeds, bwd_embeds)))  
     #predicts = bwd_embeds
  
     print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
 
+    #
+    # eval on FPBench apps
+    #
 
-    
-      
+    #in_count = 32
+    #jet_edges, jet_ops, jet_is_unary, jet_consts = jet_app() 
+
+    #non_consts = len([True for op in jet_ops if not(op == 0)])   
+    #inputs = [[rand.uniform(-5.0, 5.0), rand.uniform(-20.0, 5.0)] + jet_consts + \
+    #          [0.0 for o in range(non_consts)] for i in range(input_samp_sz)]
+
+    #in_otcs  = [gen_rand_otc(len(jet_ops)) for _in in range(in_count)]
+
+    #all_errs = []
+
+    #for in_otc in in_otcs:
+    #    curr_feats = [[jet_ops[op_idx], in_otc[op_idx]] for op_idx in range(len(jet_ops))] 
+
+    #    ex_graph = create_graph(jet_edges,\
+    #                            [OP_ENC[feat[0]][feat[1]] for feat in curr_feats],\
+    #                            jet_is_unary)
+    #    rev_g = ex_graph.reverse(share_ndata=True, share_edata=True)
+
+    #    fwd_embeds, fwd_top_ord = fwd_model(ex_graph) 
+    #    bwd_embeds, _           = bwd_model(rev_g)
+    #    predicts                = comb_model(fwd_embeds, bwd_embeds)  
+
+    #    exec_list = []
+    #    otc_orig  = []
+    #    otc_tuned = []
+
+    #    for step in fwd_top_ord:
+    #        for n in step:
+    #            rec     = int(np.argmax(predicts[n].detach()))
+    #            parents = [int(v) for v in ex_graph.in_edges(n)[0]]
+    #            if (len(parents) < 2):
+    #                if (len(parents) < 1): 
+    #                    parents.append(None) 
+    #                parents.append(None) 
+
+    #            exec_list.append([int(n), curr_feats[n][0], parents[0], parents[1]])
+    #            otc_orig.append(precs_inv[curr_feats[n][1]])
+    #            otc_tuned.append(precs_inv[tune_prec(curr_feats[n][1], rec)])
+
+    #    errs = []
+    #    gt_otc = gen_spec_otc(exec_list, precs_inv[2])
+    #    valid = True
+
+    #    for ins in inputs:
+    #        result = sim_prog(exec_list, ins, otc_tuned)
+    #        shad_result = sim_prog(exec_list, ins, gt_otc) 
+    #        err = relative_error(result, shad_result)
+    #        errs.append(err)
+    #        if (shad_result == None):
+    #            valid = False
+    #            break
+    #    if not (valid):
+    #        continue
+
+    #    all_errs.append(np.mean(errs))
 
 
 #

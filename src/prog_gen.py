@@ -15,22 +15,21 @@ from fp_funcs import *
 
 
 search_steps = 1 #for progressive tuning
-input_samp_sz = 5000    
-otc_samp_sz = 100
+input_samp_sz = 10000    
+otc_samp_sz = 250
 
-inputs_mag = 6
+inputs_mag = 3 #6
 
 precisions = [32, 64, 80] 
 prec_map ={32:0,
            64:1,
            80:2}
 
-
-p_precisions = [0.6, 0.3, 0.1]
+p_precisions = [0.4, 0.4, 0.2]  #[0.6, 0.3, 0.1]
 p_tune_max = 0.5
 p_tune_min = 0.5
 
-err_thresh = 0.001 #0.01
+err_thresh = 0.0000001 #0.01
 
 is_binary = {'ADD': True,
              'SUB': True,
@@ -39,12 +38,12 @@ is_binary = {'ADD': True,
              'SIN': False,
              'COS': False}
 
-soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
+soft_constraints = {'max_edges':30, 'max_out_degree':3, 'max_consts':4}
 #soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
 
 
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
-dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 2.0, 2.0]     
+dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]     
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
 dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
@@ -383,7 +382,7 @@ def gen_stratified_inputs(prog, samp_sz, max_mag):
 
    samps_per_mag = int(samp_sz / (max_mag * 2))
 
-   for mag in range(-max_mag + 1, max_mag):
+   for mag in range(-max_mag, max_mag+1):
 
        for samp in range(samps_per_mag):
            samp_inputs = []
@@ -812,7 +811,7 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 500
+    prog_count = 1000
 
     exec_traces = []
     solutions   = []
