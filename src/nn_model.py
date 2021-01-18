@@ -519,10 +519,10 @@ class fwd_gnn_resid(nn.Module):
             embeds4       = self.act(self.node_embeds3(th.add(embeds3, embeds1)))  
             embeds5       = self.act(self.node_embeds4(embeds4))                        
             embeds6       = self.act(self.node_embeds5(embeds5))  
-            embeds       = self.act(self.node_embeds6(th.add(embeds6, embeds4))) 
-            #embeds8       = self.act(self.node_embeds7(embeds7))                        
-            #embeds9       = self.act(self.node_embeds8(embeds8))  
-            #embeds       = self.act(self.node_embeds9(th.add(embeds9, embeds7)))
+            embeds7       = self.act(self.node_embeds6(th.add(embeds6, embeds4))) 
+            embeds8       = self.act(self.node_embeds7(embeds7))                        
+            embeds9       = self.act(self.node_embeds8(embeds8))  
+            embeds       = self.act(self.node_embeds9(th.add(embeds9, embeds7)))
 
 
             #embeds2       = self.act(self.node_embeds1(embeds1))  
@@ -551,10 +551,10 @@ class fwd_gnn_resid(nn.Module):
             msgs_redux3  = self.act(self.mp_unary3(th.add(msgs_redux2, msgs_redux0)))
             msgs_redux4  = self.act(self.mp_unary4(msgs_redux3))
             msgs_redux5  = self.act(self.mp_unary5(msgs_redux4))
-            msgs_redux  = self.act(self.mp_unary6(th.add(msgs_redux5, msgs_redux3)))
-            #msgs_redux7  = self.act(self.mp_unary7(msgs_redux6))
-            #msgs_redux8  = self.act(self.mp_unary8(msgs_redux7))
-            #msgs_redux  = self.act(self.mp_unary9(th.add(msgs_redux8, msgs_redux6)))
+            msgs_redux6  = self.act(self.mp_unary6(th.add(msgs_redux5, msgs_redux3)))
+            msgs_redux7  = self.act(self.mp_unary7(msgs_redux6))
+            msgs_redux8  = self.act(self.mp_unary8(msgs_redux7))
+            msgs_redux  = self.act(self.mp_unary9(th.add(msgs_redux8, msgs_redux6)))
 
 
             #msgs_redux0 = self.act(self.mp_unary(nodes.mailbox['fwd_msgs']))
@@ -572,10 +572,10 @@ class fwd_gnn_resid(nn.Module):
             msgs_redux3  = self.act(self.mp_binary3(th.add(msgs_redux2, msgs_redux0)))
             msgs_redux4  = self.act(self.mp_binary4(msgs_redux3))
             msgs_redux5  = self.act(self.mp_binary5(msgs_redux4))
-            msgs_redux  = self.act(self.mp_binary6(th.add(msgs_redux5, msgs_redux3)))
-            #msgs_redux7  = self.act(self.mp_binary7(msgs_redux6))
-            #msgs_redux8  = self.act(self.mp_binary8(msgs_redux7))
-            #msgs_redux  = self.act(self.mp_binary9(th.add(msgs_redux8, msgs_redux6)))
+            msgs_redux6  = self.act(self.mp_binary6(th.add(msgs_redux5, msgs_redux3)))
+            msgs_redux7  = self.act(self.mp_binary7(msgs_redux6))
+            msgs_redux8  = self.act(self.mp_binary8(msgs_redux7))
+            msgs_redux  = self.act(self.mp_binary9(th.add(msgs_redux8, msgs_redux6)))
 
             #msgs_redux0 = self.act(self.mp_binary(msgs_concat)) 
             #msgs_redux1  = self.act(self.mp_binary1(msgs_redux0))
@@ -639,10 +639,10 @@ class bwd_gnn_resid(nn.Module):
             embeds3       = self.act(self.node_embeds3(th.add(embeds2, embeds0)))
             embeds4       = self.act(self.node_embeds4(embeds3))
             embeds5       = self.act(self.node_embeds5(embeds4))
-            embeds       = self.act(self.node_embeds6(th.add(embeds5, embeds3)))
-            #embeds7       = self.act(self.node_embeds7(embeds6))
-            #embeds8       = self.act(self.node_embeds8(embeds7))
-            #embeds       = self.act(self.node_embeds9(th.add(embeds8, embeds6)))
+            embeds6       = self.act(self.node_embeds6(th.add(embeds5, embeds3)))
+            embeds7       = self.act(self.node_embeds7(embeds6))
+            embeds8       = self.act(self.node_embeds8(embeds7))
+            embeds       = self.act(self.node_embeds9(th.add(embeds8, embeds6)))
 
 
             #embeds1       = self.act(self.node_embeds1(embeds0))
@@ -664,21 +664,19 @@ class bwd_gnn_resid(nn.Module):
 
         msgs_redux0  = self.act(self.mp_bwd(msgs_sum))
         msgs_redux1   = self.act(self.mp_bwd1(msgs_redux0))
-        msgs_redux2   = self.act(self.mp_bwd2(th.add(msgs_redux1, msgs_sum)))
+        msgs_redux2   = self.act(self.mp_bwd2(th.add(msgs_redux1, msgs_sum))) #FIXME maybe use ReLU block input as layer input, instead of msg sum
         msgs_redux3   = self.act(self.mp_bwd3(msgs_redux2))
         msgs_redux4   = self.act(self.mp_bwd4(msgs_redux3))
-        msgs_redux   = self.act(self.mp_bwd5(th.add(msgs_redux4, msgs_redux2)))
-        #msgs_redux6   = self.act(self.mp_bwd6(msgs_redux5))
-        #msgs_redux7   = self.act(self.mp_bwd7(msgs_redux6))
-        #msgs_redux   = self.act(self.mp_bwd8(th.add(msgs_redux7, msgs_redux5)))
+        msgs_redux5   = self.act(self.mp_bwd5(th.add(msgs_redux4, msgs_redux2)))
+        msgs_redux6   = self.act(self.mp_bwd6(msgs_redux5))
+        msgs_redux7   = self.act(self.mp_bwd7(msgs_redux6))
+        msgs_redux   = self.act(self.mp_bwd8(th.add(msgs_redux7, msgs_redux5)))
 
         #msgs_redux0  = self.act(self.mp_bwd(msgs_sum))
         #msgs_redux1   = self.act(self.mp_bwd1(msgs_redux0))
         #msgs_redux2   = self.act(self.mp_bwd2(th.add(msgs_redux1, msgs_sum)))
         #msgs_redux3   = self.act(self.mp_bwd3(th.add(msgs_redux2, msgs_sum)))
         #msgs_redux   = self.act(self.mp_bwd4(th.add(msgs_redux3, msgs_sum)))
-
-
 
         return {'bwd_msgs_redux': msgs_redux}
 
@@ -702,28 +700,27 @@ class comb_state_resid(nn.Module):
         self.predict2 = nn.Linear(hidden_dim, hidden_dim)
         self.predict3 = nn.Linear(hidden_dim, hidden_dim)
         self.predict4 = nn.Linear(hidden_dim, hidden_dim)
-        self.predict5 = nn.Linear(hidden_dim, CLASSES)
-        #self.predict6 = nn.Linear(hidden_dim, hidden_dim)
-        #self.predict7 = nn.Linear(hidden_dim, hidden_dim)
-        #self.predict8 = nn.Linear(hidden_dim, CLASSES)
+        self.predict5 = nn.Linear(hidden_dim, hidden_dim)
+        self.predict6 = nn.Linear(hidden_dim, hidden_dim)
+        self.predict7 = nn.Linear(hidden_dim, hidden_dim)
+        self.predict8 = nn.Linear(hidden_dim, CLASSES)
   
         self.act = nn.Tanh()  
 
         
     def forward(self, fwd_states, bwd_states):
         concat_states = th.cat((fwd_states, bwd_states), -1)
-        comb_embed    = th.tanh(self.comb_embed(concat_states)) 
+        comb_embed    = self.act(self.comb_embed(concat_states)) 
 
         pred0 = self.act(self.predict(comb_embed))
         pred1 = self.act(self.predict1(pred0))
         pred2 = self.act(self.predict2(th.add(pred1, comb_embed)))
         pred3 = self.act(self.predict3(pred2))
         pred4 = self.act(self.predict4(pred3))
-        pred = self.predict5(th.add(pred4, pred2)) 
-        #pred6 = self.act(self.predict6(pred5))
-        #pred7 = self.act(self.predict7(pred6))
-        #pred = self.predict8(th.add(pred7, pred5))
-
+        pred5 = self.predict5(th.add(pred4, pred2)) 
+        pred6 = self.act(self.predict6(pred5))
+        pred7 = self.act(self.predict7(pred6))
+        pred = self.predict8(th.add(pred7, pred5))
 
         #pred0 = self.act(self.predict(comb_embed))
         #pred1 = self.act(self.predict1(pred0))

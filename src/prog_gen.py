@@ -15,8 +15,8 @@ from fp_funcs import *
 
 
 search_steps = 1 #for progressive tuning
-input_samp_sz = 10000    
-otc_samp_sz = 250
+input_samp_sz = 5000    
+otc_samp_sz = 200
 
 inputs_mag = 3 #6
 
@@ -25,7 +25,7 @@ prec_map ={32:0,
            64:1,
            80:2}
 
-p_precisions = [0.4, 0.4, 0.2]  #[0.6, 0.3, 0.1]
+p_precisions = [0.35, 0.55, 0.1] #[0.45, 0.45, 0.1]  #[0.6, 0.3, 0.1]
 p_tune_max = 0.5
 p_tune_min = 0.5
 
@@ -180,28 +180,7 @@ def conn_src(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
         if (succ):
             return   
 
-#
-def print_for_gviz(prog_g, exec_trace, precs):
-    edges = prog_g.edges()
 
-    counter = 0
-    node_ids = {}
-    for node in netwx.topological_sort(prog_g):    
-        node_ids[node] = counter
-        counter += 1              
- 
-    for e in edges:
-        if not(exec_trace[node_ids[e[0]]][1] == 0 and not(exec_trace[node_ids[e[1]]][1] == 0)):                 
-            print(str(e[0])+"_"+str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
-
-        elif not(exec_trace[node_ids[e[0]]][1] == 0):
-                print(str(e[0]) + "_" + str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ ";")
- 
-        elif not(exec_trace[node_ids[e[1]]][1] == 0):
-                print(str(e[0]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
-
-        else: 
-            print(str(e[0]) + "->" + str(e[1])+ ";")
 
 opcodes = {'CONST':0,
            'ADD':1,
@@ -359,98 +338,7 @@ def gen_prog(samplers, soft_constraints):
   
     return exec_list, prog_g
 
-
-
-# should all inputs be kept in memory? If I want to share inputs for every OTC...
-def gen_inputs(prog, samp_sz, bound_low, bound_high):
-   inputs = []
-   for samp in range(samp_sz):
-       samp_inputs = []
-       for insn in prog:
-           is_const    = True if insn[1] == 0 else False 
-           if (is_const):
-               samp_inputs.append(rand.uniform(bound_low, bound_high))
-           else:
-               samp_inputs.append(0.0)
-       inputs.append(samp_inputs)
-   return inputs
-
-
-# samples seperately at each magnitude
-def gen_stratified_inputs(prog, samp_sz, max_mag):
-   inputs  = []
-
-   samps_per_mag = int(samp_sz / (max_mag * 2))
-
-   for mag in range(-max_mag, max_mag+1):
-
-       for samp in range(samps_per_mag):
-           samp_inputs = []
-
-           for insn in prog:                            
-               is_const = True if insn[1] == 0 else False 
-               if (is_const):
-                   samp_inputs.append(rand.uniform(-1.0 * (10.0**mag), 10.0**mag))
-               else:
-                   samp_inputs.append(0.0)
-           inputs.append(samp_inputs)
-
-   return inputs   
-        
-
-    
-
-
-#
-def gen_spec_otc(prog, prec):
-    otc = [prec for insn in prog]
-    return otc
-
-#
-def gen_rand_otc(prog):
-    otc = [rand.choice(precisions, p=p_precisions) for insn in prog] 
-    return otc
-
-
-# 
-def sim_prog(insns, inputs, otc):
-    results = [None for i in insns]
-    for insn_idx in range(len(insns)):    
-        insn      = insns[insn_idx]
-        func_type = insn[1]
-        is_const  = True if func_type == 0 else False      
-        precision = otc[insn_idx]
-
-        if (is_const):
-            result = p_functions[func_type](inputs[insn_idx], precision)           
-            results[insn_idx] = result
-        else:
-            l_operand = results[insn[2]]
-            r_operand = results[insn[3]] if not(insn[3] is None) else None               
-                              
-            result = p_functions[func_type](l_operand, r_operand, precision)          
-
-            if result is None:
-                return None
-            else:
-                results[insn_idx] = result
-
-
-
-
-    # program result is in graph drain
-    return results[-1]
-
-# 
-def relative_error(val_num, val_denom):       
-    err = None
-    try:
-        err = abs(val_num - val_denom) / val_denom
-    except:
-        err = 0.0
-    return err
-
-
+          
 # 
 def tune_up(prec):
     tune_max = rand.choice([True, False], p=[p_tune_max, 1.0-p_tune_max])    
@@ -512,13 +400,7 @@ def expand_otcs_down(otcs, gen_rate):
     return expanded
 
 
-#
-def sort_otcs_by_score(otcs):
-    scores = [np.sum(otc) for otc in otcs]
-    sort_idxs = np.argsort(scores)
-    sorted_otcs = [otcs[idx] for idx in sort_idxs]
-    
-    return sorted_otcs
+
 
 #
 def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
@@ -549,7 +431,7 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
                     break
                 error = abs(relative_error(result_cand, shad_results[input_idx]))
 
-                if error > err_thresh:                 
+                if error > err_thresh:                                    
                     invalid = True
                     break
 
@@ -575,20 +457,7 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
                       
     return optimal_otc
 
-#
-def are_same_otcs(otc1, otc2):
-    if (otc1 is None or otc2 is None):
-        return False
-   
-    otc1_sz = len(otc1)
-    otc2_sz = len(otc2)
-    if not(otc1_sz == otc2_sz):
-        return False                
 
-    for i in range(otc1_sz):
-        if not(otc1[i] == otc2[i]):
-            return False
-    return True 
 
 
 #
@@ -601,6 +470,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
     cand_otcs   = sort_otcs_by_score(cand_otcs)
 
     print("\tgen shadow results")
+ 
     shad_results = [sim_prog(exec_trace, _input, max_prec_otc) for _input in inputs]
 
     for result in shad_results:
@@ -624,7 +494,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
             if result_cand == None:
                 invalid = True
                 break
-            error = relative_error(result_cand, shad_results[input_idx])
+            error = abs(relative_error(result_cand, shad_results[input_idx]))
             if error > err_thresh:                 
                 invalid = True
                 break
@@ -663,7 +533,7 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
                         viable = False
                         break
 
-                    error = relative_error(result_cand, shad_results[input_idx])
+                    error = abs(relative_error(result_cand, shad_results[input_idx]))
 
                     if error > err_thresh:                 
                         viable = False
@@ -723,12 +593,7 @@ def search_opt_otc(exec_trace, samplers):
 
     return sol, inputs
 
-# gets the # of types between solution and initial
-def otc_dist(sol_otc, init_otc, shift=0):
-    dists = []
-    for insn_idx in range(len(init_otc)):
-        dists.append(sol_otc[insn_idx] - init_otc[insn_idx] + shift)
-    return dists
+
 
 #
 def map_precisions(otc):
@@ -739,65 +604,8 @@ def map_precisions(otc):
 
 
 
-# generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
-def gen_ds(exec_trace, solution, inputs, sz):
-    feats  = []
-    labels = []
-            
-    gt_otc = gen_spec_otc(exec_trace, precisions[-1])  
-    shad_results = []
 
-    for ins in inputs:
-        shad_results.append(sim_prog(exec_trace, ins, gt_otc)) 
 
-    input_sz = len(inputs)        
-
-    for i_sol in range(sz):
-        if (i_sol % 20 == 0):
-            print("\tcreating init sol feat " + str(i_sol))
-
-        cand = None       
-        valid = False
-
-        while not(valid):
-            cand = gen_rand_otc(exec_trace)    
-    
-            for i_idx in range(input_sz):
-                result_cand = sim_prog(exec_trace, inputs[i_idx], cand) 
-    
-                if result_cand == None:
-                    break
-    
-                error = relative_error(result_cand, shad_results[i_idx])    
-                if error > err_thresh:                 
-                    break
-            valid = True
-
-        feats.append(map_precisions(cand))
-        labels.append(otc_dist(map_precisions(solution), map_precisions(cand), shift=len(precisions)-1))
-
-    return feats, labels         
-
-#
-def emit_ds(path, traces, feats, labels, feats_per_prog):
-    ds_path = path 
- 
-    with open(ds_path, 'w') as f_hand:
-        f_writer = csv.writer(f_hand, delimiter=',')
-
-        header = ['gid', 'nid','opcode','src_l','src_r','init_prec','tune_rec']
-        f_writer.writerow(header)
-
-        prog_count = len(traces) 
-
-        for prog_idx in range(prog_count):             
-            trace_len = len(traces[prog_idx])
-
-            for otc_idx in range(feats_per_prog):
-                for insn_idx in range(trace_len):                                       
-                    f_writer.writerow([prog_idx] + traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + \
-                                      [labels[prog_idx][otc_idx][insn_idx]])                
-                f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 3)])     
                       
 #    
 if __name__ == '__main__':

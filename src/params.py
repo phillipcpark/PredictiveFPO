@@ -1,9 +1,9 @@
 from copy import deepcopy
 
 BAT_SZ     = 128
-EPOCHS     = 16
+EPOCHS     = 32 #128 #32
 H_DIM      = 16
-TR_DS_PROP = 0.66 #0.85
+TR_DS_PROP = 0.66 #0.66
 VAL_DS_PROP = 0.025
 
 LAYERS = 7
@@ -16,7 +16,7 @@ IGNORE_CLASS = 6
 NUM_ATTRIBUTES = 7
 GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
 
-err_thresh = 0.001
+err_thresh = 0.0000001
 
 input_samp_sz = 5000    
 inputs_mag = 3

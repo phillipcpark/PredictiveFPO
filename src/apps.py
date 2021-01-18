@@ -1,4 +1,4 @@
-import train as tr
+
 
 # 0, 0,,
 # 1, 0,,
