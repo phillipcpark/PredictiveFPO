@@ -2,27 +2,9 @@ import sys
 import csv
 import random
 from params import *
-from nn_model import *
 
 import numpy as np
-import torch as th
-import torch.nn as nn
-import torch.nn.functional as F
-import dgl
-import networkx as nx
-import sys
-import re
-import copy
-from collections import Counter
-
-
-from fp_funcs import *
-from apps import *
-
-from otc import *
-from eval_metrics import *
 from tr_eval_model import *
-
 
   
 #
@@ -89,19 +71,17 @@ def load_predfpo_ds(path):
     shuff_idxs = np.arange(len(feats)) 
     random.shuffle(shuff_idxs)
 
-    feats = [feats[idx] for idx in shuff_idxs]
-    labels = [labels[idx] for idx in shuff_idxs]
-    g_idxs = [g_idxs[idx] for idx in shuff_idxs]
-
-    return g_edges, feats, labels, unary_masks, g_idxs
+    return g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
 
 #
 if __name__ == '__main__':
     assert(len(sys.argv) > 1), "missing path to ds"
+   
+    # FIXME really need to write a DataLoader...
+    g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs = load_predfpo_ds(sys.argv[1])
 
-    graph_edges, feats, labels, unary_masks, graph_idxs = load_predfpo_ds(sys.argv[1])
-    bid_mpgnn = train_mpgnn(graph_edges, feats, labels, unary_masks, graph_idxs)
-    mpgnn_test_eval(bid_mpgnn,graph_edges, feats, labels, unary_masks, graph_idxs)
+    bid_mpgnn = train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
+    mpgnn_test_eval(bid_mpgnn,g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
 
 
 

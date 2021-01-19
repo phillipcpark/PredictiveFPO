@@ -6,8 +6,9 @@ from params import *
 from prog_sim import *
 
 from collections import Counter
-
 import sys
+
+import torch as th
 
 # 
 def create_dgl_graph(edges, feats, is_unary_op):
@@ -22,30 +23,39 @@ def create_dgl_graph(edges, feats, is_unary_op):
 
 
 # g_edges and unary_masks are indexed by graph; feats and labels by example
-def batch_graphs(bat_sz, g_idxs, g_edges, unary_masks, feats, labels=None):
-    ex_count = min(bat_sz, len(feats))
+def batch_graphs_from_idxs(idxs, g_edges, unary_masks, g_idxs, feats, labels=None, return_glist=False):
+    ex_count = len(idxs) 
    
-    graphs_bat = []
+    graphs_list = []
     labels_bat = []
 
-    for ex_idx in range(ex_count):         
+    for ex_idx in idxs:         
         g_idx    = g_idxs[ex_idx]
         ex_graph = create_dgl_graph(g_edges[g_idx],\
                                     [OP_ENC[feat[0]][feat[1]] for feat in feats[ex_idx]],\
                                      unary_masks[g_idx])        
-        graphs_bat.append(ex_graph)
+        graphs_list.append(ex_graph)
 
         if not(labels == None):
             labels_bat += labels[ex_idx]         
 
-    graphs_bat = dgl.batch(graphs_bat) 
-    labels_bat = th.tensor(labels_bat) if not (labels == None) else None
+    graphs_bat = dgl.batch(graphs_list) 
+    labels_bat = th.tensor(labels_bat) if not(labels == None) else None
 
-    return graphs_bat, labels_bat
+    if not(labels == None):
+        if (return_glist):
+            return graphs_bat, labels_bat, graphs_list 
+        return graphs_bat, labels_bat
+
+    print("\n\t\t**labels were None!!")
+    if (return_glist):
+        return graphs_bat, graphs_list    
+    return graphs_bat
+
 
 #
 def rev_graph_batch(graphs):
-    rev_bat = [g.reverse(share_ndata=True, share_edata=True) for g in graphs]
+    rev_bat = dgl.batch([g.reverse(share_ndata=True, share_edata=True) for g in graphs])
     return rev_bat
     
 
@@ -77,7 +87,19 @@ def get_class_weights(labels):
 #
 #
 #
-def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs):
+def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
+
+    #FIXME
+    dev = None
+    if th.cuda.is_available():
+        print("\n\n**CUDA available")
+        dev = "cuda:0"
+    else:
+        print("\n\n**CUDA unavailable")
+        dev = "cpu"
+    device = th.device(dev)
+    print(device)
+    sys.exit(0) 
 
     example_count = len(feats)
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
@@ -97,13 +119,11 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs):
         #graphs in each batch combined into single monolithic graph
         for bat_idx in range(BAT_COUNT):            
             optimizer.zero_grad()
+            bat_idxs                       = shuff_idxs[bat_idx*BAT_SZ : (bat_idx+1)*BAT_SZ] 
+            graphs_bat, labels_bat, g_list = batch_graphs_from_idxs(bat_idxs, g_edges, unary_masks, g_idxs, 
+                                                                    feats, labels, return_glist=True)        
 
-            bat_start = bat_idx * BAT_SZ
-            bat_end   = bat_start + BAT_SZ
- 
-            graphs_bat, labels_bat = batch_graphs(BAT_SZ, g_idxs[bat_start:bat_end], g_edges, unary_masks,\
-                                                  feats[bat_start:bat_end], labels[bat_start:bat_end])
-            rev_bat                = graphs_bat.reverse(share_ndata=True, share_edata=True) 
+            rev_bat = rev_graph_batch(g_list)
 
             fwd_predicts, _ = bid_mpgnn['fwd'](graphs_bat)
             bwd_predicts, _ = bid_mpgnn['bwd'](rev_bat)
@@ -120,13 +140,10 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs):
             loss.backward() 
             optimizer.step()
 
-        # validation set
-        val_start = BAT_COUNT*BAT_SZ
-        val_end   = val_start + VALID_SZ
-
-        val_graphs_bat, val_labels = batch_graphs(VALID_SZ, g_idxs[val_start:val_end], g_edges, unary_masks,\
-                                              feats[val_start:val_end], labels[val_start:val_end])
-        rev_bat                    = val_graphs_bat.reverse(share_ndata=True, share_edata=True)  
+        val_idxs   = shuff_idxs[BAT_COUNT*BAT_SZ : BAT_COUNT*BAT_SZ + VALID_SZ]        
+        val_graphs_bat, val_labels, g_list = batch_graphs_from_idxs(val_idxs, g_edges, unary_masks,\
+                                                                    g_idxs, feats, labels, return_glist=True)
+        rev_bat = rev_graph_batch(g_list)
 
         fwd_predicts, _ = bid_mpgnn['fwd'](val_graphs_bat)
         bwd_predicts, _ = bid_mpgnn['bwd'](rev_bat)
@@ -146,7 +163,7 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs):
 
 
 #
-def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs):
+def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
     example_count = len(feats)
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
@@ -155,7 +172,7 @@ def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs):
     rev_graphs = []
 
     #FIXME FIXME
-    example_count = 1024
+    example_count = 512 #1024
     ex_errs = []
     all_errs = []
 
@@ -172,13 +189,14 @@ def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs):
 
     tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
 
-    for ex_idx in range(BAT_COUNT*BAT_SZ + VALID_SZ, BAT_COUNT*BAT_SZ + VALID_SZ + example_count):         
+    for shuff_idx in range(BAT_COUNT*BAT_SZ + VALID_SZ, BAT_COUNT*BAT_SZ + VALID_SZ + example_count):         
+        ex_idx   = shuff_idxs[shuff_idx] 
         g_idx    = g_idxs[ex_idx]
         ex_feats = feats[ex_idx] # tuples of [opcode, prec]
 
         ex_graph = create_dgl_graph(g_edges[g_idx],\
-                                [OP_ENC[feat[0]][feat[1]] for feat in ex_feats],\
-                                unary_masks[g_idx])
+                                    [OP_ENC[feat[0]][feat[1]] for feat in ex_feats],\
+                                     unary_masks[g_idx])
         rev_g = ex_graph.reverse(share_ndata=True, share_edata=True)
 
         tst_graphs.append(ex_graph)
@@ -308,15 +326,14 @@ def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs):
     tst_labels_bat = []
  
     for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
-        tst_labels_bat += labels[ex_idx]         
+        tst_labels_bat += labels[shuff_idxs[ex_idx]]         
        
     tst_labels_bat = th.tensor(tst_labels_bat)
 
     fwd_embeds, _   = bid_mpgnn['fwd'](tst_graphs_bat) 
     bwd_embeds, _   = bid_mpgnn['bwd'](rev_graphs_bat)
     predicts        = sm(th.sigmoid(bid_mpgnn['comb'](fwd_embeds, bwd_embeds)))  
-    #predicts = bwd_embeds
- 
+
     print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
 
 
