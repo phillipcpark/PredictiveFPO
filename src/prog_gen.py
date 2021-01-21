@@ -1,7 +1,6 @@
 from random import shuffle
 from random import choice
 import numpy as np
-from numpy import random as rand
 import networkx as netwx
 import sys
 import itertools as it
@@ -12,7 +11,12 @@ import math
 import csv
 
 from fp_funcs import *
+from prog_inputs import *
+from otc import *
+from prog_sim import *
+from eval_metrics import *
 
+from numpy import random as rand
 
 search_steps = 1 #for progressive tuning
 input_samp_sz = 5000    
@@ -224,7 +228,7 @@ gen_src = {'op_new': conn_new_op,
            'const_exist': conn_exist_const}
 
 
-#
+# FIXME FIXME FIXME are discrepancies in list ordering causing poor performance?
 def gen_exec_list(prog_g):
 
     # gen exec order from traversal   
@@ -248,6 +252,7 @@ def gen_exec_list(prog_g):
 
         operation = emit_op[node_type](node_idx, node_type, parent_idxs) 
         exec_list.append(operation)  
+
     return exec_list
 
 
@@ -330,12 +335,9 @@ def gen_prog(samplers, soft_constraints):
             while not(prog_g.nodes[op]['has_parents']):
                 if not(conn_exist_op(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)):                         
                     conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
-                 
-
-
+                
     exec_list = gen_exec_list(prog_g)
-         
-  
+          
     return exec_list, prog_g
 
           
@@ -494,7 +496,8 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
             if result_cand == None:
                 invalid = True
                 break
-            error = abs(relative_error(result_cand, shad_results[input_idx]))
+            error = relative_error(result_cand, shad_results[input_idx])
+
             if error > err_thresh:                 
                 invalid = True
                 break

@@ -1,4 +1,9 @@
 from params import *
+from numpy import random as rand
+import numpy as np
+
+precisions = [32, 64, 80] 
+p_precisions = [0.35, 0.55, 0.1]
 
 #
 def is_const(opcode):
@@ -14,12 +19,17 @@ def is_unary(opcode):
 
 #
 def tune_prec(orig, tune_rec):
-    rec = tune_rec - int((CLASSES-1)/2)
+    classes = 5
+    rec = tune_rec - int((classes-1)/2) #FIXME FIXME hc classes
 
     if rec < 1:
         return max(0, orig+rec)
     else:
         return min(2, orig+rec) 
+
+
+
+
 
 #
 def gen_spec_otc(prog, prec):
@@ -42,7 +52,7 @@ def sort_otcs_by_score(otcs):
 #
 def are_same_otcs(otc1, otc2):
 
-    # FIXME should have better handling, so None is never passed
+    # FIXME should have cleaner usage, so None is never passed
     if (otc1 is None or otc2 is None):
         return False
    

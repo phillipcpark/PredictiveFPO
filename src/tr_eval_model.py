@@ -19,37 +19,51 @@ def create_dgl_graph(edges, feats, is_unary_op):
 
     graph.ndata['node_feats']  = th.tensor(feats)
     graph.ndata['is_unary_op'] = th.tensor(is_unary_op)
+ 
     return graph
 
 
 # g_edges and unary_masks are indexed by graph; feats and labels by example
-def batch_graphs_from_idxs(idxs, g_edges, unary_masks, g_idxs, feats, labels=None, return_glist=False):
-    ex_count = len(idxs) 
+def batch_graphs_from_idxs(idxs, g_edges, unary_masks, g_idxs, feats, labels=None):
    
     graphs_list = []
     labels_bat = []
 
+    #FIXME FIXME
+    feat_counts = []
+    label_counts = []
+    
+
     for ex_idx in idxs:         
         g_idx    = g_idxs[ex_idx]
-        ex_graph = create_dgl_graph(g_edges[g_idx],\
-                                    [OP_ENC[feat[0]][feat[1]] for feat in feats[ex_idx]],\
+        edges    = g_edges[g_idx] 
+        ex_feats = feats[ex_idx] 
+
+
+        feat_counts.append(len(ex_feats))
+        label_counts.append(len(labels[ex_idx]))
+
+
+        ex_graph = None
+        if (SINGLE_GRAPH_TARG):
+            ex_graph = create_dgl_graph(g_edges[g_idx],\
+                                        [OP_ENC_NOPREC[feat] for feat in ex_feats],\
+                                         unary_masks[g_idx])
+        else:
+            ex_graph = create_dgl_graph(g_edges[g_idx],\
+                                    [OP_ENC[feat[0]][feat[1]] for feat in ex_feats],\
                                      unary_masks[g_idx])        
+        
         graphs_list.append(ex_graph)
 
         if not(labels == None):
             labels_bat += labels[ex_idx]         
-
+            
     graphs_bat = dgl.batch(graphs_list) 
     labels_bat = th.tensor(labels_bat) if not(labels == None) else None
 
     if not(labels == None):
-        if (return_glist):
-            return graphs_bat, labels_bat, graphs_list 
         return graphs_bat, labels_bat
-
-    print("\n\t\t**labels were None!!")
-    if (return_glist):
-        return graphs_bat, graphs_list    
     return graphs_bat
 
 
@@ -61,7 +75,7 @@ def rev_graph_batch(graphs):
 
 #
 def get_class_weights(labels):
-    counts = Counter(labels)
+    counts = Counter(labels) #labels.detach().numpy())
     weights = []
 
     beta = 0.9
@@ -75,65 +89,171 @@ def get_class_weights(labels):
         if (i not in counts.keys()):
             weights.append(1.0)
         else:
-            weights.append( (1.0 - beta) / (1.0 - beta**counts[i]) )
+            weights.append(1.0 / counts[i])
+
+            #weights.append( (1.0 - beta) / (1.0 - beta**counts[i]) )
             #weights.append(float(total) / (CLASSES * counts[i]))      
 
-    norm_const = np.sum(weights) / float(CLASSES)
+    norm_const = np.sum(weights)
     weights = [float(w/norm_const) for w in weights]
 
     return th.tensor(weights)
 
+# 
+def balance_classes(labels, steps=2):
+    bal_labels = labels.detach().numpy() 
 
+    for i in range(steps):
+        total =  len([l for l in bal_labels if not(l == IGNORE_CLASS)])
+        counts = Counter(bal_labels)
+
+        min_cl = counts[0]
+        for c in range(1, CLASSES):
+            if (counts[c] < min_cl):
+                min_cl = c
+
+        new_bal_labels = []
+
+        # random weighted filtering 
+        samp_weights = {}   
+
+        for k in counts.keys():
+            if (k == IGNORE_CLASS): 
+                continue
+            samp_weights[k] = 1.0 - float(counts[k]) / total
+
+        for lab_idx in range(len(bal_labels)):
+            if not(bal_labels[lab_idx] == IGNORE_CLASS):
+                if (bal_labels[lab_idx] == min_cl):
+                    new_bal_labels.append(bal_labels[lab_idx])
+                    continue
+
+                p_keep = samp_weights[bal_labels[lab_idx]]
+                keep   = np.random.choice([0,1], p=[1.0-p_keep, p_keep])                
+ 
+                if (keep == 0):
+                    new_bal_labels.append(IGNORE_CLASS) 
+                else:
+                    new_bal_labels.append(bal_labels[lab_idx]) 
+            else:
+                new_bal_labels.append(IGNORE_CLASS)    
+
+        bal_labels = new_bal_labels 
+    return th.tensor(bal_labels)
+
+
+#
+def get_dev():
+    dev = None
+
+    print("\n** CUDA: " + str(th.cuda.is_available()))
+
+    if th.cuda.is_available():
+        dev = "cuda:0"
+    else:
+        dev = "cpu"
+    return th.device(dev)
+
+
+
+# check whether or not all-SP and gt solutions work, as well as if GT throws exception
+def check_triv_sols(exec_list, inputs):
+    errs = []
+    triv_errs = []
+
+    gt_otc   = gen_spec_otc(exec_list, precs_inv[2])
+    triv_otc = gen_spec_otc(exec_list, precs_inv[0])
+
+    # skip if trivial result viable
+    for ins in inputs:
+        shad_result = sim_prog(exec_list, ins, gt_otc) 
+
+        if (shad_result == None):
+            print("\tground truch OTC threw exception")
+            return False
+
+        triv_result = sim_prog(exec_list, ins, triv_otc)
+        triv_err = relative_error(triv_result, shad_result)
+        triv_errs.append(triv_err)
+
+    if (np.amax(triv_errs) < err_thresh):
+        rel_idx = shuff_idx - (BAT_COUNT*BAT_SZ + VALID_SZ)            
+        print("\ttrivial solution worked for all inputs " + str(np.amax(triv_errs)))
+        return False
+
+    accept, gt_thresh_prop = accept_err(triv_errs)
+    if (accept):
+        print("\ttrivial worked for prop of inputs")        
+        return False
+
+    return True
+
+
+#
+def update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig):    
+    # precision counts
+    total = len(otc_tuned)
+
+    orig_counts = {32:0, 64:0, 80:0}
+    for prec in otc_orig:
+        orig_counts[prec] += 1
+
+    prec_counts = {32:0, 64:0, 80:0} 
+    for prec in otc_tuned:
+        prec_counts[prec] += 1                
+
+    for k in prec_counts.keys():
+        prec_freq_deltas[k].append(float(prec_counts[k])/total - float(orig_counts[k])/total)
+
+
+
+    
 #
 #
 #
 def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 
-    #FIXME
-    dev = None
-    if th.cuda.is_available():
-        print("\n\n**CUDA available")
-        dev = "cuda:0"
-    else:
-        print("\n\n**CUDA unavailable")
-        dev = "cpu"
-    device = th.device(dev)
-    print(device)
-    sys.exit(0) 
-
     example_count = len(feats)
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
 
-    bid_mpgnn = {'fwd': fwd_gnn_resid(OP_ENC_DIM, H_DIM),
-                 'bwd': bwd_gnn_resid(OP_ENC_DIM, H_DIM),
-                 'comb': comb_state_resid(OP_ENC_DIM, H_DIM)}
- 
-    optimizer = th.optim.Adagrad(list(bid_mpgnn['fwd'].parameters()) + list(bid_mpgnn['bwd'].parameters()) + \
-                                 list(bid_mpgnn['comb'].parameters()), lr=L_RATE)
+    feat_dim = OP_ENC_NOPREC_DIM if SINGLE_GRAPH_TARG else OP_ENC_DIM
+    gnn = bid_mpgnn(feat_dim, H_DIM, CLASSES)
 
+    optimizer = th.optim.Adagrad(gnn.parameters()) 
+    
     for epoch in range(EPOCHS):
         ep_loss = []
         ep_acc  = []
 
+        ep_prec = []
+        ep_rec  = []
+
         #graphs in each batch combined into single monolithic graph
         for bat_idx in range(BAT_COUNT):            
             optimizer.zero_grad()
-            bat_idxs                       = shuff_idxs[bat_idx*BAT_SZ : (bat_idx+1)*BAT_SZ] 
-            graphs_bat, labels_bat, g_list = batch_graphs_from_idxs(bat_idxs, g_edges, unary_masks, g_idxs, 
-                                                                    feats, labels, return_glist=True)        
 
-            rev_bat = rev_graph_batch(g_list)
+            bat_idxs                = shuff_idxs[bat_idx*BAT_SZ : (bat_idx+1)*BAT_SZ] 
+            graphs_bat, labels_bat  = batch_graphs_from_idxs(bat_idxs, g_edges, unary_masks, g_idxs, 
+                                                                    feats, labels)        
+            predicts, _ = gnn(graphs_bat)
+            
+            comp_loss = None 
+            if (USE_CL_BAL):
+                class_weights = get_class_weights(labels_bat.detach().numpy()) 
+                comp_loss = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_CLASS, size_average=True) 
+            else:
+                comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
 
-            fwd_predicts, _ = bid_mpgnn['fwd'](graphs_bat)
-            bwd_predicts, _ = bid_mpgnn['bwd'](rev_bat)
-            predicts        = bid_mpgnn['comb'](fwd_predicts, bwd_predicts)
-                
-            #class_weights = get_class_weights(labels_bat.detach().numpy()) 
-            #comp_loss = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_CLASS, size_average=True) 
-            comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
+            # FIXME label filtering
+            #labels_bat = balance_classes(labels_bat) 
+
+            prec, rec = prec_recall(predicts, labels_bat)
+            ep_prec.append(prec)
+            ep_rec.append(rec)
+
             loss      = comp_loss(predicts, labels_bat)
-         
+                     
             ep_loss.append(loss.item())
             ep_acc.append(pred_acc(predicts, th.tensor(labels_bat)))
 
@@ -141,82 +261,75 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
             optimizer.step()
 
         val_idxs   = shuff_idxs[BAT_COUNT*BAT_SZ : BAT_COUNT*BAT_SZ + VALID_SZ]        
-        val_graphs_bat, val_labels, g_list = batch_graphs_from_idxs(val_idxs, g_edges, unary_masks,\
-                                                                    g_idxs, feats, labels, return_glist=True)
-        rev_bat = rev_graph_batch(g_list)
-
-        fwd_predicts, _ = bid_mpgnn['fwd'](val_graphs_bat)
-        bwd_predicts, _ = bid_mpgnn['bwd'](rev_bat)
-        val_predicts    = bid_mpgnn['comb'](fwd_predicts, bwd_predicts)
+        val_graphs_bat, val_labels = batch_graphs_from_idxs(val_idxs, g_edges, unary_masks,\
+                                                                    g_idxs, feats, labels)
+        val_predicts, _ = gnn(val_graphs_bat)
 
         comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
-
-        val_loss = comp_loss(val_predicts, val_labels)
-        val_acc  = pred_acc(val_predicts, val_labels)
+        val_loss  = comp_loss(val_predicts, val_labels)
+        val_acc   = pred_acc(val_predicts, val_labels)
 
         if (epoch == 0):
             print("\nepoch,tr_loss,tr_acc,val_loss,val_acc")                   
-        print(str(epoch) + "," + str(np.mean(ep_loss)) + "," + str(np.mean(ep_acc)) + \
+
+        print("\n" + str(epoch) + "," + str(np.mean(ep_loss)) + "," + str(np.mean(ep_acc)) + \
               "," + str(val_loss.item()) + "," + str(val_acc))
 
-    return bid_mpgnn 
+        # avg prec-rec
+        avg_prec = {}
+        avg_rec  = {}
+        for c in range(CLASSES):
+            avg_prec[c] = []
+            avg_rec[c]  = [] 
+        for i in range(BAT_COUNT):
+            for c in range(CLASSES):            
+                avg_prec[c].append(ep_prec[i][c])
+                avg_rec[c].append(ep_rec[i][c]) 
+        for c in range(CLASSES):            
+            print("\t" + str(c) + ": " + str(np.mean(avg_prec[c])) + ", " + str(np.mean(avg_rec[c])))
+
+    return gnn 
 
 
 #
-def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
-    example_count = len(feats)
+def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
+
+    example_count = 100 #1024
+
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
 
-    tst_graphs = []
-    rev_graphs = []
-
-    #FIXME FIXME
-    example_count = 512 #1024
-    ex_errs = []
-    all_errs = []
-
     # difference in prec % after tuning
-    all_prec_freq_deltas = {32:[], 64:[], 80:[]}
-    comp_succ_freq_deltas = {32:[], 64:[], 80:[]}
-    mean_succ_freq_deltas = {32:[], 64:[], 80:[]}
+    prec_freq_deltas = {32:[], 64:[], 80:[]}
+    all_count = avg_good_count = all_good_count = all_prop_count =  0
 
-    all_prec_improv = []
-    comp_prec_improv = []
-    mean_prec_improv = []
+    tune_counts = None
+    if (SINGLE_GRAPH_TARG):
+        tune_counts = {0:0, 1:0, 2:0} 
+    else:
+        tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
 
-    all_count = avg_good_count = all_good_count =  0
-
-    tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
+    tst_graphs = []
 
     for shuff_idx in range(BAT_COUNT*BAT_SZ + VALID_SZ, BAT_COUNT*BAT_SZ + VALID_SZ + example_count):         
         ex_idx   = shuff_idxs[shuff_idx] 
+
         g_idx    = g_idxs[ex_idx]
         ex_feats = feats[ex_idx] # tuples of [opcode, prec]
 
-        ex_graph = create_dgl_graph(g_edges[g_idx],\
-                                    [OP_ENC[feat[0]][feat[1]] for feat in ex_feats],\
-                                     unary_masks[g_idx])
-        rev_g = ex_graph.reverse(share_ndata=True, share_edata=True)
-
-        tst_graphs.append(ex_graph)
-        rev_graphs.append(rev_g)
-         
-        fwd_embeds, fwd_top_ord = bid_mpgnn['fwd'](ex_graph) 
-        bwd_embeds, bwd_top_ord = bid_mpgnn['bwd'](rev_g) 
+        ex_graph, ex_label = batch_graphs_from_idxs([ex_idx], g_edges, unary_masks, g_idxs, 
+                                                     feats, labels)        
+        
+        predicts, top_order = gnn(ex_graph)
 
         sm = nn.Softmax(dim=-1)
-        predicts = sm(th.sigmoid(bid_mpgnn['comb'](fwd_embeds, bwd_embeds)))
-
-        for pred in predicts:
-            tune_counts[np.argmax(pred.detach().numpy())] += 1
+        predicts = sm(th.sigmoid(predicts))
 
         exec_list = []
         otc_orig  = []
         otc_tuned = []
 
-        for step in fwd_top_ord:
-            #there may be multiple nodes at same position in top order
+        for step in top_order:
             for n in step:
                 rec = int(np.argmax(predicts[n].detach()))
                 parents = [int(v) for v in ex_graph.in_edges(n)[0]]
@@ -224,115 +337,67 @@ def mpgnn_test_eval(bid_mpgnn, g_edges, feats, labels, unary_masks, g_idxs, shuf
                     if (len(parents) < 1): 
                         parents.append(None) 
                     parents.append(None) 
-
-                exec_list.append([int(n), ex_feats[n][0], parents[0], parents[1]])
-
-                otc_orig.append(precs_inv[ex_feats[n][1]])
-                otc_tuned.append(precs_inv[tune_prec(ex_feats[n][1], rec)])
-                                   
-
-        #
+ 
+                if (SINGLE_GRAPH_TARG):
+                    exec_list.append([int(n), ex_feats[n], parents[0], parents[1]])
+                    otc_tuned.append(precs_inv[rec])
+                else:
+                    exec_list.append([int(n), ex_feats[n], parents[0], parents[1]])
+                    otc_orig.append(precs_inv[ex_feats[n][1]])              
+                    otc_tuned.append(precs_inv[tune_prec(ex_feats[n][1], rec)])
+                                          
         # run tuned otc
-        #
         inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
+         
+        if not(check_triv_sols):
+            continue
 
-        errs = []
-        triv_errs = []
+        tst_graphs.append(ex_graph)
+        ex_errs = []
 
         gt_otc = gen_spec_otc(exec_list, precs_inv[2])
-        triv_otc = gen_spec_otc(exec_list, precs_inv[0])
 
-        # skip if trivial result viable
         for ins in inputs:
+            result      = sim_prog(exec_list, ins, otc_tuned)
             shad_result = sim_prog(exec_list, ins, gt_otc) 
-            triv_result = sim_prog(exec_list, ins, triv_otc)
-            triv_err = abs(relative_error(triv_result, shad_result))
-            triv_errs.append(triv_err)
+            ex_errs.append(relative_error(result, shad_result))
 
-        if (np.amax(triv_errs) < err_thresh):
-            print("\t**trivial solution worked for test example; skipping " + str(np.amax(triv_errs)))
-            continue
-
-        # discard test program if shadow not valid
-        valid = True
-        for ins in inputs:
-            result = sim_prog(exec_list, ins, otc_tuned)
-            shad_result = sim_prog(exec_list, ins, gt_otc) 
-
-            err = abs(relative_error(result, shad_result))
-            errs.append(err)
-
-            if (shad_result == None):
-                valid = False
-                break
-        if not (valid):
-            print("\t**shadow was invalid for test example")
-            continue
-
-        if (np.mean(errs) < err_thresh):
+        if (np.mean(ex_errs) < err_thresh):
             avg_good_count += 1
-        if (np.amax(errs) < err_thresh):
+        if (np.amax(ex_errs) < err_thresh):
             all_good_count += 1
         all_count += 1
 
-        ex_errs.append(np.mean(errs)) 
-    
-        # precision counts
-        total = len(otc_tuned)
+        # proportion based acceptance
+        accept, gt_thresh_prop = accept_err(ex_errs)
+        if (accept):
+            all_prop_count += 1
 
-        orig_counts = {32:0, 64:0, 80:0}
-        for prec in otc_orig:
-            orig_counts[prec] += 1
+        for pred in predicts:
+            tune_counts[np.argmax(pred.detach().numpy())] += 1
 
-        tun_counts = {32:0, 64:0, 80:0}
-        for prec in otc_tuned:
-            tun_counts[prec] += 1                
-
-
-        # only do counts for tuned programs that succeed        
-        for k in tun_counts.keys():
-            all_prec_freq_deltas[k].append(float(tun_counts[k])/total - float(orig_counts[k])/total)
-            all_prec_improv.append( np.sum(otc_orig) - np.sum(otc_tuned) )
-
-            if (np.mean(errs) < err_thresh):
-                mean_succ_freq_deltas[k].append(float(tun_counts[k])/total - float(orig_counts[k])/total)
-                mean_prec_improv.append( np.sum(otc_orig) - np.sum(otc_tuned) )
-
-                if (np.amax(errs) < err_thresh):
-                    comp_succ_freq_deltas[k].append(float(tun_counts[k])/total - float(orig_counts[k])/total)    
-                    comp_prec_improv.append( np.sum(otc_orig) - np.sum(otc_tuned) )
-
-    
-    print("\n\t\t**proportion within thresh, on average across inputs " + str(float(avg_good_count) / float(all_count))) 
-    print("\t\t**proportion within thresh, for all inputs " + str(float(all_good_count) / float(all_count))) 
-
-    print("\n\tcomplete sol avg precision proportion deltas ")
-    for k in comp_succ_freq_deltas.keys():
-        print(str(k) + " : " + str(np.mean(comp_succ_freq_deltas[k]))) 
-    print("\n\tmean sol avg precision proportion deltas ")
-    for k in mean_succ_freq_deltas.keys():
-        print(str(k) + " : " + str(np.mean(mean_succ_freq_deltas[k]))) 
-
-    print("\tcomplete sol avg precision improvement " + str(np.mean(comp_prec_improv)))
-    print("\tmean sol avg precision improvement " + str(np.mean(mean_prec_improv)))
+        # NOTE use with input OTC version 
+        if not(SINGLE_GRAPH_TARG):
+            update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig)   
+     
+    print("\n**proportion within thresh, on average across inputs " + str(float(avg_good_count) / float(all_count))) 
+    print("**proportion within thresh, for all inputs " + str(float(all_good_count) / float(all_count))) 
+    print("**proportion within thresh, for proportion of inputs " + str(float(all_prop_count) / float(all_count)))
 
     print("\ntune counts")
     for key in tune_counts.keys():
         print(str(key) + " " + str(tune_counts[key]))
     
-    tst_graphs_bat  = dgl.batch(tst_graphs)
-    rev_graphs_bat = dgl.batch(rev_graphs)
-
+    tst_graphs_bat = dgl.batch(tst_graphs)
     tst_labels_bat = []
  
     for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
-        tst_labels_bat += labels[shuff_idxs[ex_idx]]         
-       
+        tst_labels_bat += labels[shuff_idxs[ex_idx]]                
     tst_labels_bat = th.tensor(tst_labels_bat)
 
-    fwd_embeds, _   = bid_mpgnn['fwd'](tst_graphs_bat) 
-    bwd_embeds, _   = bid_mpgnn['bwd'](rev_graphs_bat)
-    predicts        = sm(th.sigmoid(bid_mpgnn['comb'](fwd_embeds, bwd_embeds)))  
+    predicts,_ = gnn(tst_graphs_bat)
+    sm       = nn.Softmax(dim=-1)
+    predicts = sm(th.sigmoid(predicts))
 
     print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
 

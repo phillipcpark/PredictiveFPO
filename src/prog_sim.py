@@ -26,4 +26,4 @@ def sim_prog(insns, inputs, otc):
                 results[result_id] = result
 
     # program result is in graph drain
-    return results[-1]
+    return float(results[-1])
