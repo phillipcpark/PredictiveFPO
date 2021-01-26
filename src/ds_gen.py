@@ -1,3 +1,5 @@
+from prog_gen import *
+
 
 # generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
 def gen_ds(exec_trace, solution, inputs, sz):
@@ -83,5 +85,74 @@ def print_for_gviz(prog_g, exec_trace, precs):
 
         else: 
             print(str(e[0]) + "->" + str(e[1])+ ";")
+
+
+                      
+#    
+if __name__ == '__main__':
+
+    p_edges     = rand.dirichlet(dir_p_edges)
+    p_ops       = rand.dirichlet(dir_p_ops)   
+        
+    samp_edge = cat_sampler(p_edges, edge_types)
+    samp_op   = cat_sampler(p_ops, op_types)
+    const_gen = const_generator()
+    samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
+
+    start_t = time.time()
+    prog_count = 1000
+
+    exec_traces = []
+    solutions   = []
+    inputs      = []
+
+    for i in range(prog_count):
+        print("\n******\n**prog\n****** " + str(i))
+        sol_otc = None
+        candidates = None
+
+        exec_trace = None
+        sol_otc = None
+        samp_inputs  = None
+
+        while (sol_otc is None):
+            exec_trace, prog_g  = gen_prog(samplers, soft_constraints)        
+            sol_otc, samp_inputs = search_opt_otc(exec_trace, samplers)
+
+        if not(np.sum(sol_otc) == 0):
+            print("\t**sol otc was, SOMEHOW, all-sp")    
+            continue
+
+        #FIXME
+        #print_for_gviz(prog_g, exec_trace, sol_otc)
+
+        exec_traces.append(exec_trace)
+        solutions.append(sol_otc)
+        inputs.append(samp_inputs)         
+ 
+    end_t = time.time()
+            
+    print("\n** " + str(prog_count) + " done in " + str(end_t - start_t)) 
+                    
+    #number of a priori input OTCs are generated
+    feats_per_prog = 50 
+    all_feats = []
+    all_labels = [] 
+
+    for prog_idx in range(len(exec_traces)):    
+        print("gen feats for prog " + str(prog_idx))
+
+        feats, labels = gen_ds(exec_traces[prog_idx], solutions[prog_idx], inputs[prog_idx], feats_per_prog) 
+        all_feats.append(feats)
+        all_labels.append(labels)
+
+    path = sys.argv[1]
+    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)
+
+
+
+
+
+
 
 

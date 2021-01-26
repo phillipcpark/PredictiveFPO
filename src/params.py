@@ -1,32 +1,54 @@
 from copy import deepcopy
 
-SINGLE_GRAPH_TARG = True
 
-BAT_SZ     = 50 #64
-EPOCHS     = 16 #1 #64 #128 #32
+#doesn't use input OTCs and predicts precision directly
+# don't use with COARSE_TUNE or SP_TARGET 
+SINGLE_GRAPH_TARG = False 
+
+#target is binary (single-class problem; e.g. tune to 32, or tune -1 type, etc.)
+COARSE_TUNE = True 
+
+#select whether or not to predict ops for 32, rather decision to tune -1 type
+SP_TARGET = False
+
+###############
+#training specs 
+###############
+BAT_SZ     = 64
+EPOCHS     = 16 #32 #64 #128 #32
 H_DIM      = 32
-TR_DS_PROP = 0.33 #0.85 #0.85
-VAL_DS_PROP = 0.05 #0.005 #0.1
+TR_DS_PROP = 0.66 #0.85 #0.85
+VAL_DS_PROP = 0.01 #0.005 #0.1
 
-LAYERS = 7
-
-L_RATE = 0.1
-USE_CL_BAL = True
-
+L_RATE     = 0.1
+USE_CL_BAL = False
 
 CLASSES = 3 if SINGLE_GRAPH_TARG else 5
+if (COARSE_TUNE):
+    CLASSES = 2
+
 IGNORE_CLASS = 6
 
-MP_STEPS = 8
-
-NUM_ATTRIBUTES = 7
-GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
-
-err_thresh = 0.0000001
-err_accept_prop = 0.995
+######################
+#model and ds gen dims
+#######################
+MP_STEPS      = 3
+TIE_MP_PARAMS = True
 
 input_samp_sz = 10000    
-inputs_mag = 3
+inputs_mag    = 3
+
+err_thresh      = 0.00001
+err_accept_prop = 0.999
+
+CONST_PREC = 64
+
+
+#######
+# other
+#######
+NUM_ATTRIBUTES = 7
+GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
 
 precs = {32:0, 64:1, 80:2}
 precs_inv = {0:32, 1:64, 2:80}

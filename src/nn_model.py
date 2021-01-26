@@ -35,16 +35,22 @@ class fwd_mpgnn(nn.Module):
         self.act = nn.Tanh()
 
         self.embed_op  = nn.Linear(feat_dim, hidden_dim) 
+
         self.comb_embed  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.comb_embed1 = resnet(hidden_dim, hidden_dim)
+        self.comb_embed2 = resnet(hidden_dim, hidden_dim)
 
         self.node_embeds = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.node_embeds1 = resnet(hidden_dim, hidden_dim)
+        self.node_embeds2 = resnet(hidden_dim, hidden_dim)
 
         self.mp_unary = resnet(hidden_dim, hidden_dim)
         self.mp_unary1 = resnet(hidden_dim, hidden_dim)
+        self.mp_unary2 = resnet(hidden_dim, hidden_dim)
+
         self.mp_binary  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.mp_binary1 = resnet(hidden_dim, hidden_dim)
+        self.mp_binary2 = resnet(hidden_dim, hidden_dim)
 
     #
     def apply_func(self, nodes):                              
@@ -55,12 +61,14 @@ class fwd_mpgnn(nn.Module):
         if ('fwd_node_embeds' in nodes.data.keys()):
             embeds = self.act(self.comb_embed(th.cat((embeds, nodes.data['fwd_node_embeds']), axis=-1))) 
             embeds = self.act(self.comb_embed1(embeds)) 
+            embeds = self.act(self.comb_embed2(embeds)) 
 
         # constant nodes will not enter this branch
         if ('fwd_msgs_redux' in nodes.data.keys()):             
             concat_feats = th.cat((embeds, nodes.data['fwd_msgs_redux'].reshape((node_count, self.hidden_dim))), -1)
             embeds       = self.act(self.node_embeds(concat_feats))
             embeds       = self.act(self.node_embeds1(embeds))  
+            embeds       = self.act(self.node_embeds2(embeds))  
         return {'fwd_node_embeds': embeds}
 
     #
@@ -77,10 +85,12 @@ class fwd_mpgnn(nn.Module):
         if (is_unary==True):
             msgs_redux = self.act(self.mp_unary(nodes.mailbox['fwd_msgs']))
             msgs_redux  = self.act(self.mp_unary1(msgs_redux))
+            msgs_redux  = self.act(self.mp_unary2(msgs_redux))
         else:
             msgs_concat = nodes.mailbox['fwd_msgs'].reshape((node_count, 1, 2*self.hidden_dim))
             msgs_redux  = self.act(self.mp_binary(msgs_concat)) 
             msgs_redux  = self.act(self.mp_binary1(msgs_redux))
+            msgs_redux  = self.act(self.mp_binary2(msgs_redux))
         return {'fwd_msgs_redux': msgs_redux}
 
     #
@@ -105,12 +115,15 @@ class bwd_mpgnn(nn.Module):
 
         self.mp_bwd  = resnet(hidden_dim, hidden_dim)
         self.mp_bwd1 = resnet(hidden_dim, hidden_dim)
+        self.mp_bwd2 = resnet(hidden_dim, hidden_dim)
 
         self.node_embeds  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.node_embeds1 = resnet(hidden_dim, hidden_dim)
+        self.node_embeds2 = resnet(hidden_dim, hidden_dim)
 
         self.comb_embed = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.comb_embed1 = resnet(hidden_dim, hidden_dim)
+        self.comb_embed2 = resnet(hidden_dim, hidden_dim)
 
 
     #
@@ -121,11 +134,13 @@ class bwd_mpgnn(nn.Module):
         if ('bwd_node_embeds' in nodes.data.keys()):
             embeds = self.act(self.comb_embed(th.cat((embeds, nodes.data['bwd_node_embeds']), axis=-1)))
             embeds = self.act(self.comb_embed1(embeds)) 
+            embeds = self.act(self.comb_embed2(embeds)) 
 
         if ('bwd_msgs_redux' in nodes.data.keys()):             
             concat_feats = th.cat((embeds, nodes.data['bwd_msgs_redux'].reshape((node_count, self.hidden_dim))), -1)
             embeds       = self.act(self.node_embeds(concat_feats))
             embeds       = self.act(self.node_embeds1(embeds))
+            embeds       = self.act(self.node_embeds2(embeds))
         return {'bwd_node_embeds': embeds}
 
     #
@@ -139,6 +154,7 @@ class bwd_mpgnn(nn.Module):
 
         msgs_redux = self.act(self.mp_bwd(msgs_sum))
         msgs_redux = self.act(self.mp_bwd1(msgs_redux))
+        msgs_redux = self.act(self.mp_bwd2(msgs_redux))
         return {'bwd_msgs_redux': msgs_redux}
 
     #
@@ -163,10 +179,11 @@ class bid_mpgnn(nn.Module):
         self.bwd_nets = nn.ModuleList([bwd_mpgnn(in_dim, hidden_dim)])
         self.comb_embeds = nn.ModuleList([resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)])
 
-        for mp_step in range(MP_STEPS-1):
-            self.fwd_nets.append(fwd_mpgnn(in_dim, hidden_dim))
-            self.bwd_nets.append(bwd_mpgnn(in_dim, hidden_dim))         
-            self.comb_embeds.append(resnet(2*hidden_dim, 2*hidden_dim, hidden_dim))
+        if not(TIE_MP_PARAMS):        
+            for mp_step in range(MP_STEPS-1):
+                self.fwd_nets.append(fwd_mpgnn(in_dim, hidden_dim))
+                self.bwd_nets.append(bwd_mpgnn(in_dim, hidden_dim))         
+                self.comb_embeds.append(resnet(2*hidden_dim, 2*hidden_dim, hidden_dim))
 
         self.predict  = resnet(hidden_dim, hidden_dim, out_dim)
 
@@ -183,9 +200,11 @@ class bid_mpgnn(nn.Module):
             graph.ndata['fwd_node_embeds']     = comb
             rev_graph.ndata['bwd_node_embeds'] = comb
 
-            fwd_embed, fwd_topo_order = self.fwd_nets[mp_step](graph, fwd_topo_order)
-            bwd_embed, bwd_topo_order = self.bwd_nets[mp_step](rev_graph, bwd_topo_order)
-            comb                      = self.act(self.comb_embeds[mp_step](th.cat((fwd_embed, bwd_embed), axis=-1)))
+            step_net_idx = 0 if TIE_MP_PARAMS else mp_step
+
+            fwd_embed, fwd_topo_order = self.fwd_nets[step_net_idx](graph, fwd_topo_order)
+            bwd_embed, bwd_topo_order = self.bwd_nets[step_net_idx](rev_graph, bwd_topo_order)
+            comb                      = self.act(self.comb_embeds[step_net_idx](th.cat((fwd_embed, bwd_embed), axis=-1)))
 
         pred = self.predict(comb)
         return pred, fwd_topo_order

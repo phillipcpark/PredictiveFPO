@@ -100,7 +100,7 @@ def get_class_weights(labels):
     return th.tensor(weights)
 
 # 
-def balance_classes(labels, steps=2):
+def undersamp_classes(labels, steps=2):
     bal_labels = labels.detach().numpy() 
 
     for i in range(steps):
@@ -157,10 +157,11 @@ def get_dev():
 
 
 # check whether or not all-SP and gt solutions work, as well as if GT throws exception
-def check_triv_sols(exec_list, inputs):
-    errs = []
-    triv_errs = []
+def check_init_sols(exec_list, inputs, orig_otc):
 
+    triv_errs = []
+    orig_errs = []
+    
     gt_otc   = gen_spec_otc(exec_list, precs_inv[2])
     triv_otc = gen_spec_otc(exec_list, precs_inv[0])
 
@@ -169,23 +170,36 @@ def check_triv_sols(exec_list, inputs):
         shad_result = sim_prog(exec_list, ins, gt_otc) 
 
         if (shad_result == None):
-            print("\tground truch OTC threw exception")
+            #print("\tground truch OTC threw exception")
             return False
 
         triv_result = sim_prog(exec_list, ins, triv_otc)
-        triv_err = relative_error(triv_result, shad_result)
-        triv_errs.append(triv_err)
+        orig_result = sim_prog(exec_list, ins, orig_otc)
 
+        if (triv_result == None):
+            return True
+        else:
+            triv_errs.append(relative_error(triv_result, shad_result))
+
+        # FIXME FIXME FIXMe should we forgo discarding orig OTCs that throw exceptions?
+        if (orig_result == None):
+            return False
+        else:
+            orig_errs.append(relative_error(orig_result, shad_result))            
+ 
     if (np.amax(triv_errs) < err_thresh):
-        rel_idx = shuff_idx - (BAT_COUNT*BAT_SZ + VALID_SZ)            
-        print("\ttrivial solution worked for all inputs " + str(np.amax(triv_errs)))
+        #print("\ttrivial solution worked for all inputs " + str(np.amax(triv_errs)))
+        return False
+
+    accept, gt_thresh_prop = accept_err(orig_errs)
+    if not(accept):
+        #print("\torig solution didn't work for prop of inputs")
         return False
 
     accept, gt_thresh_prop = accept_err(triv_errs)
     if (accept):
-        print("\ttrivial worked for prop of inputs")        
-        return False
-
+        #print("\ttrivial worked for prop of inputs")        
+        return False   
     return True
 
 
@@ -212,6 +226,8 @@ def update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig):
 #
 #
 def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
+
+    print("\n*********training phase*********")
 
     example_count = len(feats)
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
@@ -246,7 +262,7 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
                 comp_loss = nn.CrossEntropyLoss(ignore_index=IGNORE_CLASS, size_average=True) 
 
             # FIXME label filtering
-            #labels_bat = balance_classes(labels_bat) 
+            #labels_bat = undersamp_classes(labels_bat) 
 
             prec, rec = prec_recall(predicts, labels_bat)
             ep_prec.append(prec)
@@ -294,7 +310,9 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 #
 def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 
-    example_count = 100 #1024
+    print("\n**********test phase*************")
+
+    example_count = 1024 #512 #1024
 
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
@@ -307,13 +325,20 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     if (SINGLE_GRAPH_TARG):
         tune_counts = {0:0, 1:0, 2:0} 
     else:
-        tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
-
-    tst_graphs = []
+        if (COARSE_TUNE):
+            tune_counts = {0:0, 1:0}
+        else:
+            tune_counts = {0:0, 1:0, 2:0, 3:0, 4:0}
+    
+    tst_precs = []
+    tst_recs = []
 
     for shuff_idx in range(BAT_COUNT*BAT_SZ + VALID_SZ, BAT_COUNT*BAT_SZ + VALID_SZ + example_count):         
-        ex_idx   = shuff_idxs[shuff_idx] 
 
+        if (shuff_idx % 200 == 0):#100 == 0):
+            print("tst_idx " + str(shuff_idx - (BAT_COUNT*BAT_SZ + VALID_SZ)))
+
+        ex_idx   = shuff_idxs[shuff_idx] 
         g_idx    = g_idxs[ex_idx]
         ex_feats = feats[ex_idx] # tuples of [opcode, prec]
 
@@ -342,17 +367,34 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
                     exec_list.append([int(n), ex_feats[n], parents[0], parents[1]])
                     otc_tuned.append(precs_inv[rec])
                 else:
-                    exec_list.append([int(n), ex_feats[n], parents[0], parents[1]])
+                    exec_list.append([int(n), ex_feats[n][0], parents[0], parents[1]])
                     otc_orig.append(precs_inv[ex_feats[n][1]])              
-                    otc_tuned.append(precs_inv[tune_prec(ex_feats[n][1], rec)])
+
+                    if (COARSE_TUNE):
+
+                        #FIXME FIXME
+                        if (SP_TARGET):
+                            otc_tuned.append(32 if rec==1 else precs_inv[ex_feats[n][1]])
+                        else: #tune down 1 type
+                            otc_tuned.append(precs_inv[max(0, ex_feats[n][1]-1)] if rec==1 else precs_inv[ex_feats[n][1]])
+ 
+                    else:
+                        otc_tuned.append(precs_inv[tune_prec(ex_feats[n][1], rec)])
                                           
         # run tuned otc
         inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
-         
-        if not(check_triv_sols):
+
+
+        # skip example if either trivial sol works, shadow throws except, orig sol throws except         
+        if not(check_init_sols(exec_list, inputs, otc_orig)):
             continue
 
-        tst_graphs.append(ex_graph)
+
+        # FIXME prec-recall on each test ex
+        prec, rec = prec_recall(predicts, ex_label)
+        tst_precs.append(prec)
+        tst_recs.append(rec)
+
         ex_errs = []
 
         gt_otc = gen_spec_otc(exec_list, precs_inv[2])
@@ -376,33 +418,52 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         for pred in predicts:
             tune_counts[np.argmax(pred.detach().numpy())] += 1
 
-        # NOTE use with input OTC version 
         if not(SINGLE_GRAPH_TARG):
             update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig)   
-     
-    print("\n**proportion within thresh, on average across inputs " + str(float(avg_good_count) / float(all_count))) 
+
+    print("\n**test prog count: " + str(all_count) + "\n")     
+    print("**proportion within thresh, on average across inputs " + str(float(avg_good_count) / float(all_count))) 
     print("**proportion within thresh, for all inputs " + str(float(all_good_count) / float(all_count))) 
     print("**proportion within thresh, for proportion of inputs " + str(float(all_prop_count) / float(all_count)))
 
     print("\ntune counts")
     for key in tune_counts.keys():
         print(str(key) + " " + str(tune_counts[key]))
+
+    print("\navg prec-recall across tests graphs")
+    avg_prec = {}
+    avg_rec  = {}
+    for c in range(CLASSES):
+        avg_prec[c] = []
+        avg_rec[c]  = [] 
+    for i in range(len(tst_precs)):
+        for c in range(CLASSES):            
+            avg_prec[c].append(tst_precs[i][c])
+            avg_rec[c].append(tst_recs[i][c]) 
+    for c in range(CLASSES):            
+        print("\t" + str(c) + ": " + str(np.mean(avg_prec[c])) + ", " + str(np.mean(avg_rec[c])))
+
+
     
-    tst_graphs_bat = dgl.batch(tst_graphs)
-    tst_labels_bat = []
+    #tst_graphs_bat = dgl.batch(tst_graphs)
+    #tst_labels_bat = []
  
-    for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
-        tst_labels_bat += labels[shuff_idxs[ex_idx]]                
-    tst_labels_bat = th.tensor(tst_labels_bat)
+    #for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
+    #    tst_labels_bat += labels[shuff_idxs[ex_idx]]                
+    #tst_labels_bat = th.tensor(tst_labels_bat)
 
-    predicts,_ = gnn(tst_graphs_bat)
-    sm       = nn.Softmax(dim=-1)
-    predicts = sm(th.sigmoid(predicts))
+    #predicts,_ = gnn(tst_graphs_bat)
+    #sm       = nn.Softmax(dim=-1)
+    #predicts = sm(th.sigmoid(predicts))
 
-    print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
+    #print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
 
+    #
+    #prec, rec = prec_recall(predicts, tst_labels_bat)
 
-
+    ## avg prec-rec
+    #for c in range(CLASSES):            
+    #    print("\t" + str(c) + ": " + str(prec[c]) + ", " + str(rec[c]))
 
 
 

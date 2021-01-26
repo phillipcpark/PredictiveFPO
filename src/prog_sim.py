@@ -1,4 +1,5 @@
 from fp_funcs import * 
+from params import *
 
 # 
 def sim_prog(insns, inputs, otc):
@@ -12,7 +13,7 @@ def sim_prog(insns, inputs, otc):
         precision = otc[insn_idx]
 
         if (is_const):
-            result = p_functions[func_type](inputs[insn_idx], precision)           
+            result = p_functions[func_type](inputs[insn_idx], CONST_PREC)           
             results[result_id] = result
         else:
             l_operand = results[insn[2]]

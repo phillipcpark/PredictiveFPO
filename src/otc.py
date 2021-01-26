@@ -19,8 +19,19 @@ def is_unary(opcode):
 
 #
 def tune_prec(orig, tune_rec):
-    classes = 5
-    rec = tune_rec - int((classes-1)/2) #FIXME FIXME hc classes
+    rec = None
+
+    #FIXME binary problem tunes to 32
+    if (COARSE_TUNE):
+        if (tune_rec == 1):
+            rec = -2  
+        else:
+            rec = 0
+    else:
+
+        CLASSES = 5 #FIXME hardcoded for DS loader label gen
+
+        rec = tune_rec - int(CLASSES-1)/int(2)
 
     if rec < 1:
         return max(0, orig+rec)

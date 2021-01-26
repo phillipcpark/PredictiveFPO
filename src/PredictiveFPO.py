@@ -82,6 +82,7 @@ def load_nootcfeat_ds(path):
         last_g_idx = g_idxs[ex_idx]
 
         feats_filt.append([feats[ex_idx][idx][0] for idx in range(len(feats[ex_idx]))])           
+
         labels_filt.append([tune_prec(feats[ex_idx][idx][1], labels[ex_idx][idx]) if not(labels[ex_idx][idx] == IGNORE_CLASS) else IGNORE_CLASS \
                                                                 for idx in range(len(feats[ex_idx]))])
  
@@ -144,6 +145,17 @@ def load_predfpo_ds(path):
 
             if (is_const(attrs[2])):
                 labels[-1].append(IGNORE_CLASS)
+
+           
+            elif (COARSE_TUNE):
+                classes = 5 #NOTE hardcoded
+                gt_prec = max(attrs[5] + (attrs[6] - int(classes-1)/int(2)), 0) 
+
+                if (SP_TARGET):
+                    labels[-1].append(1 if (gt_prec == 0) else 0)
+                else:
+                    labels[-1].append(1 if attrs[6] < int(classes-1)/int(2) else 0)
+
             else:
                 labels[-1].append(attrs[6])
 
@@ -171,21 +183,22 @@ def output_targ_stats(labels):
     print("")
 
 
+
+# FIXME FIXME test set should be unseen graphs!!
+
+
 #
 if __name__ == '__main__':
     assert(len(sys.argv) > 1), "missing path to ds"
 
     g_edges = feats =  labels = unary_masks = g_idxs = shuff_idxs = None
    
-    # FIXME really need to write a DataLoader...
     if (SINGLE_GRAPH_TARG):
         g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs = load_nootcfeat_ds(sys.argv[1])
     else: 
         g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs = load_predfpo_ds(sys.argv[1])
-
     
     output_targ_stats(labels)
-
 
     bid_mpgnn = train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
     mpgnn_test_eval(bid_mpgnn,g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
