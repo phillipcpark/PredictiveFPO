@@ -1,4 +1,8 @@
-
+from nn_model import *
+from params import *
+from prog_inputs import *
+from otc import *
+from eval_metrics import *
 
 # 0, 0,,
 # 1, 0,,
@@ -75,5 +79,45 @@ def jet_app():
     unary_masks = [False for op in n_ops] 
   
     return edges, n_ops, unary_masks, consts
+
+
+# FIXME 
+# checking if jet works in SP
+#feat_dim = OP_ENC_NOPREC_DIM if SINGLE_GRAPH_TARG else OP_ENC_DIM
+#gnn = bid_mpgnn(feat_dim, H_DIM, CLASSES)
+#
+#edges, feats, unary_masks, consts = jet_app()
+#ex_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], [feats])        
+#
+#_, top_order = gnn(ex_graph)
+#exec_list    = []
+#
+#for step in top_order:
+#    for n in step:
+#        parents = [int(v) for v in ex_graph.in_edges(n)[0]]
+#        if (len(parents) < 2):
+#            if (len(parents) < 1): 
+#                parents.append(None) 
+#            parents.append(None) 
+#        exec_list.append([int(n), feats[n], parents[0], parents[1]])
+#
+#inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
+#
+#gt_otc = gen_spec_otc(exec_list, precs_inv[2])
+#sp_otc = gen_spec_otc(exec_list, precs_inv[1])
+#
+#ex_errs = []
+#
+#for ins in inputs:
+#    result      = sim_prog(exec_list, ins, sp_otc)
+#    shad_result = sim_prog(exec_list, ins, gt_otc) 
+#    ex_errs.append(relative_error(result, shad_result))
+#
+#accept, gt_thresh_prop = accept_err(ex_errs)
+#
+#print("\naccept: " + str(accept))
+#print("max_err: " + str(np.amax(ex_errs)))
+
+
 
 

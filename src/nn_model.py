@@ -3,8 +3,13 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl
+from copy import deepcopy
+
 from params import *
 import sys
+from tr_eval_model import *
+
+
 
 #
 # 
@@ -55,20 +60,31 @@ class fwd_mpgnn(nn.Module):
     #
     def apply_func(self, nodes):                              
         node_count = len(nodes.nodes())
-        embeds     = self.act(self.embed_op(nodes.data['node_feats']))
+        op_embeds  = self.act(self.embed_op(nodes.data['node_feats']))
+        embeds     = op_embeds
 
         # subsequent steps of MP will entire this branch
         if ('fwd_node_embeds' in nodes.data.keys()):
-            embeds = self.act(self.comb_embed(th.cat((embeds, nodes.data['fwd_node_embeds']), axis=-1))) 
-            embeds = self.act(self.comb_embed1(embeds)) 
-            embeds = self.act(self.comb_embed2(embeds)) 
+            embeds = nodes.data['fwd_node_embeds']
+            #embeds = self.act(self.comb_embed(th.cat((embeds, nodes.data['fwd_node_embeds']), axis=-1))) 
+            #embeds = self.act(self.comb_embed1(embeds)) 
+            #embeds = self.act(self.comb_embed2(embeds)) 
 
         # constant nodes will not enter this branch
         if ('fwd_msgs_redux' in nodes.data.keys()):             
+
+            #FIXME problem: embeds is either op_embed or fwd_node_embeds -node_embed layers have 2 different input spaces!
+            #          -does untying parameters alleviate this?
+
             concat_feats = th.cat((embeds, nodes.data['fwd_msgs_redux'].reshape((node_count, self.hidden_dim))), -1)
             embeds       = self.act(self.node_embeds(concat_feats))
             embeds       = self.act(self.node_embeds1(embeds))  
             embeds       = self.act(self.node_embeds2(embeds))  
+
+            if ('fwd_node_embeds' in nodes.data.keys()):           
+                embeds = self.act(self.comb_embed(th.cat((embeds, op_embeds), axis=-1)))
+                embeds = self.act(self.comb_embed1(embeds)) 
+                embeds = self.act(self.comb_embed2(embeds)) 
         return {'fwd_node_embeds': embeds}
 
     #
@@ -94,12 +110,22 @@ class fwd_mpgnn(nn.Module):
         return {'fwd_msgs_redux': msgs_redux}
 
     #
-    def forward(self, graph, fwd_topo_order = None):
-        if (fwd_topo_order == None):   
-            fwd_topo_order = dgl.topological_nodes_generator(graph)  
-        graph.prop_nodes(fwd_topo_order, self.msg_func, self.redux_func, self.apply_func) 
+    def forward(self, graph, use_gpu): #, fwd_topo_order = None):
 
-        return graph.ndata['fwd_node_embeds'], fwd_topo_order
+        #init_fwd_topo_order = deepcopy(fwd_topo_order)
+
+        if (use_gpu):
+            with th.cuda.device(0):
+                #if (fwd_topo_order == None):   
+                fwd_topo_order = dgl.topological_nodes_generator(graph)  
+                fwd_topo_order = [node_front.to(th.device("cuda:0")) for node_front in fwd_topo_order]     
+                graph.prop_nodes(fwd_topo_order, self.msg_func, self.redux_func, self.apply_func) 
+
+        else:
+            fwd_topo_order = dgl.topological_nodes_generator(graph)  
+            graph.prop_nodes(fwd_topo_order, self.msg_func, self.redux_func, self.apply_func) 
+
+        return graph.ndata['fwd_node_embeds'] #, init_fwd_topo_order
 
 #
 #
@@ -158,12 +184,24 @@ class bwd_mpgnn(nn.Module):
         return {'bwd_msgs_redux': msgs_redux}
 
     #
-    def forward(self, graph, bwd_topo_order=None):
-        if (bwd_topo_order == None):
-            bwd_topo_order = dgl.topological_nodes_generator(graph)
-        graph.prop_nodes(bwd_topo_order, self.msg_func, self.redux_func, self.apply_func)        
+    def forward(self, graph, use_gpu): #, bwd_topo_order=None):
 
-        return graph.ndata['bwd_node_embeds'], bwd_topo_order
+        if (use_gpu):
+            with th.cuda.device(0):
+                bwd_topo_order = dgl.topological_nodes_generator(graph)
+                bwd_topo_order = [node_front.to(th.device("cuda:0")) for node_front in bwd_topo_order]
+                graph.prop_nodes(bwd_topo_order, self.msg_func, self.redux_func, self.apply_func)        
+
+        else:
+                #if (bwd_topo_order == None):
+                bwd_topo_order = dgl.topological_nodes_generator(graph)
+
+                # because topo order is a generator
+                #init_bwd_topo_order = deepcopy(bwd_topo_order)
+
+                graph.prop_nodes(bwd_topo_order, self.msg_func, self.redux_func, self.apply_func)        
+
+        return graph.ndata['bwd_node_embeds'] #, init_bwd_topo_order
 
 
 #
@@ -188,25 +226,34 @@ class bid_mpgnn(nn.Module):
         self.predict  = resnet(hidden_dim, hidden_dim, out_dim)
 
  
-    def forward(self, graph):
+    def forward(self, graph, use_gpu):
+
         rev_graph = graph.reverse(share_ndata=True, share_edata=True) 
 
         # init step
-        fwd_embed, fwd_topo_order = self.fwd_nets[0](graph)
-        bwd_embed, bwd_topo_order = self.bwd_nets[0](rev_graph)
+        fwd_embed = self.fwd_nets[0](graph, use_gpu)
+        bwd_embed = self.bwd_nets[0](rev_graph, use_gpu)
         comb                      = self.comb_embeds[0](th.cat((fwd_embed, bwd_embed), axis=-1))
-        
+
+        # 
+        # TODO depthwise models
+        # get node depths from the topo_order
+        #       
+ 
         for mp_step in range(MP_STEPS-1):
             graph.ndata['fwd_node_embeds']     = comb
             rev_graph.ndata['bwd_node_embeds'] = comb
 
             step_net_idx = 0 if TIE_MP_PARAMS else mp_step
 
-            fwd_embed, fwd_topo_order = self.fwd_nets[step_net_idx](graph, fwd_topo_order)
-            bwd_embed, bwd_topo_order = self.bwd_nets[step_net_idx](rev_graph, bwd_topo_order)
+            fwd_embed = self.fwd_nets[step_net_idx](graph, use_gpu)
+            bwd_embed = self.bwd_nets[step_net_idx](rev_graph, use_gpu)
             comb                      = self.act(self.comb_embeds[step_net_idx](th.cat((fwd_embed, bwd_embed), axis=-1)))
 
         pred = self.predict(comb)
+
+        fwd_topo_order = dgl.topological_nodes_generator(graph)
+
         return pred, fwd_topo_order
 
 

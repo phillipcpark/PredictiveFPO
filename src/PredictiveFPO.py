@@ -183,10 +183,6 @@ def output_targ_stats(labels):
     print("")
 
 
-
-# FIXME FIXME test set should be unseen graphs!!
-
-
 #
 if __name__ == '__main__':
     assert(len(sys.argv) > 1), "missing path to ds"

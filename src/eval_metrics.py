@@ -12,7 +12,17 @@ def pred_acc(predicts, labels):
         if (labels[p_idx].detach() == IGNORE_CLASS):
             continue  
 
-        pred_class = np.argmax(np.array(predicts[p_idx].detach())) 
+        pred_class = None
+
+        #FIXME thresholded prediction
+        if (USE_PRED_THRESH):
+            pred_class = 0
+            max_prob   = np.amax(predicts.detach().numpy()[p_idx])
+            if (max_prob >= PRED_THRESH):
+                pred_class = np.argmax(predicts[p_idx].detach().numpy())
+
+        else:
+            pred_class = np.argmax(np.array(predicts[p_idx].detach())) 
         true_class = np.array(labels[p_idx].detach())
 
         if (pred_class == true_class):
@@ -32,13 +42,21 @@ def prec_recall(predicts, labels):
         incorrect[c] = 0
 
     for p_idx in range(len(predicts)):
-        pred = np.argmax(predicts[p_idx].detach().numpy()) 
         gt   = labels[p_idx].detach().numpy() 
 
-        if (pred == gt):
-            correct[pred] += 1
+        pred_class = 0
+
+        if (USE_PRED_THRESH):
+            max_prob   = np.amax(predicts.detach().numpy()[p_idx])
+            if (max_prob >= PRED_THRESH):
+                pred_class = np.argmax(predicts[p_idx].detach().numpy())       
         else:
-            incorrect[pred] += 1             
+            pred_class = np.argmax(predicts[p_idx].detach().numpy()) 
+
+        if (pred_class == gt):
+            correct[pred_class] += 1
+        else:
+            incorrect[pred_class] += 1             
 
     total = len(labels)
 
