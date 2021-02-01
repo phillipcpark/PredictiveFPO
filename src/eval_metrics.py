@@ -93,14 +93,16 @@ def relative_error(val_num, val_denom):
 
 # see if error sample is acceptable
 def accept_err(errs):
-    sz           = len(errs)
-    contrib_prop = 1.0 / sz
-    prop_over_thresh = 0.0
+    sz        = len(errs)
+    gt_thresh = 0
+    max_count = int(sz * (1.0 - err_accept_prop))
 
     for err in errs:
         if (err > err_thresh):
-            prop_over_thresh += contrib_prop
-            if (prop_over_thresh > (1.0 - err_accept_prop)):
-                return False, prop_over_thresh
-    return True, prop_over_thresh
+            gt_thresh += 1
+
+    prop_gt_thresh = float(gt_thresh) / float(sz) 
+    if (prop_gt_thresh >= (1.0 - err_accept_prop)):
+        return False, prop_gt_thresh
+    return True, prop_gt_thresh
 

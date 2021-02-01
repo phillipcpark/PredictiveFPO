@@ -4,11 +4,16 @@ from otc import *
 from prog_inputs import *
 from params import *
 from prog_sim import *
+from apps import *
 
 from collections import Counter
 import sys
-
 import torch as th
+
+
+#FIXME FIXME FIXME 
+# -parents get misordered for non commutative ops! 
+
 
 # 
 def create_dgl_graph(edges, feats, is_unary_op, use_gpu):
@@ -158,8 +163,6 @@ def get_dev():
         dev = "cuda:0"
     else:
         dev = "cpu"
-
-        #FIXME FIXME
         print("\n\t**CUDA unavailable")
         sys.exit(0)
 
@@ -256,7 +259,6 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
     gnn = bid_mpgnn(feat_dim, H_DIM, CLASSES)
     optimizer = th.optim.Adagrad(gnn.parameters()) 
 
-
     if (USE_GPU):
         gnn.to(get_dev())
         optimizer_to(optimizer,get_dev())
@@ -268,6 +270,8 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 
         ep_prec = []
         ep_rec  = []
+
+        comp_loss = None
 
         #graphs in each batch combined into single monolithic graph
         for bat_idx in range(BAT_COUNT):            
@@ -314,22 +318,22 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
         val_idxs   = shuff_idxs[BAT_COUNT*BAT_SZ : BAT_COUNT*BAT_SZ + VALID_SZ]        
         val_graphs_bat, val_labels = batch_graphs_from_idxs(val_idxs, g_edges, unary_masks,\
                                                                     g_idxs, feats, USE_GPU, labels)
-
-        if (USE_GPU):
-            val_graphs_bat = val_graphs_bat.to(get_dev())
             
         val_predicts, _ = gnn(val_graphs_bat, USE_GPU)
 
+        if (USE_GPU):
+            val_graphs_bat = val_graphs_bat.to(get_dev())
         val_loss = None
+
+        #FIXME FIXME
+        comp_loss.weights = th.tensor([1.0 for i in range(CLASSES)]) 
 
         if (USE_GPU):
             val_loss  = comp_loss(val_predicts, val_labels.to(get_dev()))
             val_predicts = val_predicts.to("cpu")
         else:
             val_loss = comp_loss(val_predicts, val_labels)
-
         val_acc   = pred_acc(val_predicts, val_labels)
-
 
         if (epoch == 0):
             print("\nepoch,tr_loss,tr_acc,val_loss,val_acc")                   
@@ -353,15 +357,20 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
     return gnn 
 
 
+
+######################################################################
+# FIXME FIXME FIXME FIXME FIXME FIXME make sure not to tune constants!
+######################################################################
+
+
 #
 def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 
-    #FIXME FIXME using only CPU now for test phase
     gnn.to("cpu")
 
     print("\n**********test phase*************")
 
-    example_count = 2048 #512 #1024
+    example_count = 16 #512 #1024
 
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
@@ -399,80 +408,79 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         sm = nn.Softmax(dim=-1)
         predicts = sm(th.sigmoid(predicts))
 
-        # FIXME
-        if (shuff_idx - (BAT_COUNT*BAT_SZ+VALID_SZ) < 4):
-            print("")
-            for p_idx in range(len(predicts)):
-                if not(ex_feats[p_idx][0] == 0):
-                    print(str(predicts.detach().numpy()[p_idx]) + ", true: " + str(ex_label.detach().numpy()[p_idx])) 
+        # print predicts 
+        #
+        #if (shuff_idx - (BAT_COUNT*BAT_SZ+VALID_SZ) < 8):
+        #    print("")
+        #    for p_idx in range(len(predicts)):
+        #        if not(ex_feats[p_idx][0] == 0):
+        #            print(str(predicts.detach().numpy()[p_idx]) + ", true: " + str(ex_label.detach().numpy()[p_idx])) 
 
-        exec_list = []
-        otc_orig  = []
-        otc_tuned = []
+        exec_list = [None for i in range(len(ex_feats))]
+        otc_orig  = [None for i in range(len(ex_feats))]
+        otc_tuned  = [None for i in range(len(ex_feats))]      
 
         for step in top_order:
-            for n in step:
+            for n in step:       
                 rec = int(np.argmax(predicts[n].detach()))
                 parents = [int(v) for v in ex_graph.in_edges(n)[0]]
+
+                #FIXME FIXME FIXME parents get misordered for non commutative ops! 
                 if (len(parents) < 2):
                     if (len(parents) < 1): 
                         parents.append(None) 
                     parents.append(None) 
  
                 if (SINGLE_GRAPH_TARG):
-                    exec_list.append([int(n), ex_feats[n], parents[0], parents[1]])
-                    otc_tuned.append(precs_inv[rec])
+                    exec_list[n] = [int(n), ex_feats[n], parents[0], parents[1]]
+
+                    if not(ex_feats[n] == ops['CONST']):
+                        otc_tuned[n] = precs_inv[rec]
                 else:
-                    exec_list.append([int(n), ex_feats[n][0], parents[0], parents[1]])
-                    otc_orig.append(precs_inv[ex_feats[n][1]])              
+                    exec_list[n] = ([int(n), ex_feats[n][0], parents[0], parents[1]])
+                    otc_orig[n]  = precs_inv[ex_feats[n][1]]              
 
-                    if (COARSE_TUNE):
-
-                        # FIXME FIXME check that this logic is correct (in particular, with constants)
-                        if (SP_TARGET):
-                            otc_tuned.append(32 if rec==1 else precs_inv[ex_feats[n][1]])
-
-                        else: #tune down 1 type
-                            otc_tuned.append(precs_inv[max(0, ex_feats[n][1]-1)] if rec==1 else precs_inv[ex_feats[n][1]])
- 
-                    else:
-                        otc_tuned.append(precs_inv[tune_prec(ex_feats[n][1], rec)])
+                    if not(ex_feats[n] == ops['CONST']):
+                        if (COARSE_TUNE):
+                            if (SP_TARGET):
+                                otc_tuned[n] = 32 if (rec==1 and predicts.detach().numpy()[n][rec] >= PRED_THRESH) \
+                                                  else precs_inv[ex_feats[n][1]]                            
+                            else: 
+                                otc_tuned[n] = precs_inv[max(0, ex_feats[n][1]-1)] if (rec==1 and predicts.detach().numpy()[n][rec] >= PRED_THRESH)\
+                                                                                   else precs_inv[ex_feats[n][1]] 
+                        else:
+                            otc_tuned[n] = precs_inv[tune_prec(ex_feats[n][1], rec)]
                                           
-        # run tuned otc
         inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
-
 
         # skip example if either trivial sol works, shadow throws except, orig sol throws except         
         if not(check_init_sols(exec_list, inputs, otc_orig)):
             continue
 
-
-        # FIXME prec-recall on each test ex
         prec, rec = prec_recall(predicts, ex_label)
         tst_precs.append(prec)
         tst_recs.append(rec)
 
         ex_errs = []
-
         gt_otc = gen_spec_otc(exec_list, precs_inv[2])
 
         for ins in inputs:
             result      = sim_prog(exec_list, ins, otc_tuned)
             shad_result = sim_prog(exec_list, ins, gt_otc) 
             ex_errs.append(relative_error(result, shad_result))
-
         all_count += 1
 
-        # proportion based acceptance
         accept, gt_thresh_prop = accept_err(ex_errs)
         if (accept):
             all_prop_count += 1
 
-        for pred in predicts:
-            tune_counts[np.argmax(pred.detach().numpy())] += 1
-
-        if not(SINGLE_GRAPH_TARG):
-            update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig)   
+            for pred in predicts:
+                tune_counts[np.argmax(pred.detach().numpy())] += 1
+            if not(SINGLE_GRAPH_TARG):
+                update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig)   
+            
+        if (all_count >= MAX_TST_PROGS):
+            break 
 
     print("\n**test prog count: " + str(all_count) + "\n")     
     print("**proportion within thresh, for proportion of inputs " + str(float(all_prop_count) / float(all_count)))
@@ -495,26 +503,157 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         print("\t" + str(c) + ": " + str(np.mean(avg_prec[c])) + ", " + str(np.mean(avg_rec[c])))
 
 
-    
-    #tst_graphs_bat = dgl.batch(tst_graphs)
-    #tst_labels_bat = []
- 
-    #for ex_idx in range(BAT_COUNT*BAT_SZ+VALID_SZ, BAT_COUNT*BAT_SZ+VALID_SZ +example_count):
-    #    tst_labels_bat += labels[shuff_idxs[ex_idx]]                
-    #tst_labels_bat = th.tensor(tst_labels_bat)
 
-    #predicts,_ = gnn(tst_graphs_bat)
-    #sm       = nn.Softmax(dim=-1)
-    #predicts = sm(th.sigmoid(predicts))
-
-    #print("\n**test accuracy: " + str(pred_acc(predicts, tst_labels_bat)))
 
     #
-    #prec, rec = prec_recall(predicts, tst_labels_bat)
+    # eval on fpb
+    #
 
-    ## avg prec-rec
-    #for c in range(CLASSES):            
-    #    print("\t" + str(c) + ": " + str(prec[c]) + ", " + str(rec[c]))
+    # jet
+    edges, n_ops, unary_masks, consts = jet_app()
+    inputs = gen_jet_inputs(consts, input_samp_sz) 
 
+    # create exec list            
+    exec_list = []    
+    for n in range(len(n_ops)): 
+
+        #NOTE seems like this is a better way to maintain commutativity since edges are kept in the order they're added
+        parents = [e[0] for e in edges if e[1] == n] 
+
+        if (len(parents) < 2):                       
+            if (len(parents) < 1): 
+                parents.append(None) 
+            parents.append(None) 
+        exec_list.append([int(n), n_ops[n], parents[0], parents[1]])
+
+    # make prediction
+    dp_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], 
+                                      [ [[op,1] for op in n_ops] ], use_gpu=False)            
+
+    predicts, _ = gnn(dp_graph, False)
+    sm = nn.Softmax(dim=-1)
+    predicts = sm(th.sigmoid(predicts))
+
+    tuned_otc = [64 for i in range(len(predicts))]
+
+    for p_idx in range(len(predicts)):
+       if not(n_ops[p_idx] == ops['CONST']):
+           rec = int(np.argmax(predicts[p_idx].detach()))  
+           if (predicts.detach().numpy()[p_idx][rec] >= PRED_THRESH and rec==1):
+               tuned_otc[p_idx] = 32
+
+    print("\njet tuned otc: " + str(tuned_otc))
+              
+    gt_otc = gen_spec_otc(exec_list, precs_inv[2])    
+    init_otc = gen_spec_otc(exec_list, precs_inv[1])
+    sp_otc = gen_spec_otc(exec_list, precs_inv[0])
+
+    ex_errs = []
+    init_errs = []
+    sp_errs  = []   
+
+    init_good = True
+ 
+    for ins in inputs:
+        result      = sim_prog(exec_list, ins, tuned_otc)
+        shad_result = sim_prog(exec_list, ins, gt_otc) 
+        init_result = sim_prog(exec_list, ins, init_otc)
+        sp_result   = sim_prog(exec_list, ins, sp_otc)
+
+        if (shad_result == None or init_result == None):
+            init_good = False
+
+        ex_errs.append(relative_error(result, shad_result))    
+        init_errs.append(relative_error(init_result, shad_result))
+        sp_errs.append(relative_error(sp_result, shad_result))
+
+    accept_init, _ = accept_err(init_errs)
+    accept_sp, _   = accept_err(sp_errs)
+
+    if not(init_good):
+        print("\t****initial sol or GT threw exception!")
+
+    if not(accept_init):
+        print("\t**initial sol (all-DP) for jet wasn't accepted!")
+    elif (accept_sp):
+        print("\t**trivial sol (all-SP) for jet was accepted!")
+
+    accept, prop_gt_thresh = accept_err(ex_errs)    
+    print("**accept model-tuned jet: " + str(accept) + ", prop > thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+
+
+    ########
+    # kepler
+    ########
+
+    edges, n_ops, unary_masks, consts = kep1_app()
+    inputs = gen_kep1_inputs(consts, input_samp_sz) 
+
+    # create exec list            
+    exec_list = []    
+    for n in range(len(n_ops)): 
+        parents = [e[0] for e in edges if e[1] == n]
+        if (len(parents) < 2):                       
+            if (len(parents) < 1): 
+                parents.append(None) 
+            parents.append(None) 
+        exec_list.append([int(n), n_ops[n], parents[0], parents[1]])
+
+    # make prediction
+    dp_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], 
+                                      [ [[op,1] for op in n_ops] ], use_gpu=False)            
+
+    predicts, _ = gnn(dp_graph, False)
+    sm = nn.Softmax(dim=-1)
+    predicts = sm(th.sigmoid(predicts))
+
+    tuned_otc = [64 for i in range(len(predicts))]
+
+    for p_idx in range(len(predicts)):
+       if not(n_ops[p_idx] == ops['CONST']):
+           rec = int(np.argmax(predicts[p_idx].detach()))  
+
+           if (predicts.detach().numpy()[p_idx][rec] >= PRED_THRESH and rec==1):
+               tuned_otc[p_idx] = 32
+
+    print("\nkep1 tuned otc: " + str(tuned_otc))
+              
+    gt_otc = gen_spec_otc(exec_list, precs_inv[2])    
+    init_otc = gen_spec_otc(exec_list, precs_inv[1])
+    sp_otc = gen_spec_otc(exec_list, precs_inv[0])
+
+    ex_errs = []
+    init_errs = []
+    sp_errs  = []   
+
+    init_good = True
+ 
+    for ins in inputs:
+        result      = sim_prog(exec_list, ins, tuned_otc)
+        shad_result = sim_prog(exec_list, ins, gt_otc) 
+        init_result = sim_prog(exec_list, ins, init_otc)
+        sp_result   = sim_prog(exec_list, ins, sp_otc)
+
+        if (shad_result == None or init_result == None):
+            init_good = False 
+            continue
+
+        ex_errs.append(relative_error(result, shad_result))    
+        init_errs.append(relative_error(init_result, shad_result))
+        sp_errs.append(relative_error(sp_result, shad_result))
+
+    accept_init, _ = accept_err(init_errs)
+    accept_sp, prop_gt_thresh   = accept_err(sp_errs)
+
+    if not(init_good):
+        print("\t****initial sol or GT threw exception!")
+
+    if not(accept_init):
+        print("\t**initial sol (all-DP) for kep1 wasn't accepted!")
+    elif (accept_sp):
+        print("\t**trivial sol (all-SP) for kep1 was accepted with prop " + str(prop_gt_thresh) + " > thresh and max_err: " + str(np.amax(sp_errs)))
+
+    accept, prop_gt_thresh = accept_err(ex_errs)    
+    print("**accept model-tuned kep1: " + str(accept) + " prop>thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
 
 

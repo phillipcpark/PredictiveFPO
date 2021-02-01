@@ -74,17 +74,18 @@ def print_for_gviz(prog_g, exec_trace, precs):
         counter += 1              
  
     for e in edges:
-        if not(exec_trace[node_ids[e[0]]][1] == 0 and not(exec_trace[node_ids[e[1]]][1] == 0)):                 
-            print(str(e[0])+"_"+str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
+        print("\"" + str(ops_inv[exec_trace[e[0]][1]])+ "_" + str(e[0]) + "\" -> \"" +  str(ops_inv[exec_trace[e[1]][1]]) + "_"+ str(e[1]) + "\";")
+        #if not(exec_trace[node_ids[e[0]]][1] == 0 and not(exec_trace[node_ids[e[1]]][1] == 0)):                 
+        #    print(str(e[0])+"_"+str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
 
-        elif not(exec_trace[node_ids[e[0]]][1] == 0):
-                print(str(e[0]) + "_" + str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ ";")
+        #elif not(exec_trace[node_ids[e[0]]][1] == 0):
+        #        print(str(e[0]) + "_" + str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ ";")
  
-        elif not(exec_trace[node_ids[e[1]]][1] == 0):
-                print(str(e[0]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
+        #elif not(exec_trace[node_ids[e[1]]][1] == 0):
+        #        print(str(e[0]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
 
-        else: 
-            print(str(e[0]) + "->" + str(e[1])+ ";")
+        #else: 
+        #    print(str(e[0]) + "->" + str(e[1])+ ";")
 
 
                       

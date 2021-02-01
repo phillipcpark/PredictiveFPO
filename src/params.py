@@ -1,28 +1,30 @@
 from copy import deepcopy
 
-USE_GPU = True
+USE_GPU = False
+
+MAX_TST_PROGS = 2 #512
 
 #doesn't use input OTCs and predicts precision directly
 # don't use with COARSE_TUNE or SP_TARGET 
-SINGLE_GRAPH_TARG = False 
+SINGLE_GRAPH_TARG = False
 
 #target is binary (single-class problem; e.g. tune to 32, or tune -1 type, etc.)
 COARSE_TUNE = True 
 
 #select whether or not to predict ops for 32, rather decision to tune -1 type
-SP_TARGET = False
+SP_TARGET = True
 
 ###############
 #training specs 
 ###############
-BAT_SZ     = 1024
-EPOCHS     = 32 #16 #32 
+BAT_SZ     = 128
+EPOCHS     = 0 
 H_DIM      = 32 #64
-TR_DS_PROP = 0.9 #0.8 #0.85 #0.85
+TR_DS_PROP = 0.05
 VAL_DS_PROP = 0.01 #0.005 #0.1
 
 L_RATE     = 0.1
-USE_CL_BAL = False
+USE_CL_BAL = True
 
 CLASSES = 3 if SINGLE_GRAPH_TARG else 5
 if (COARSE_TUNE):
@@ -34,13 +36,10 @@ IGNORE_CLASS = 6
 #model and ds gen dims
 #######################
 MP_STEPS      = 8
-TIE_MP_PARAMS = False #True
+TIE_MP_PARAMS = False
 
-
-#FIXME FIXME
 USE_PRED_THRESH = True
-PRED_THRESH   = 0.6
-
+PRED_THRESH   = 0.65
 
 input_samp_sz = 10000    
 inputs_mag    = 3
@@ -67,6 +66,16 @@ ops   = {'CONST':0,\
          'DIV':4, \
          'SIN':5, \
          'COS':6}
+
+ops_inv = {0: 'CONST',\
+           1: '+', \
+           2: '-',\
+           3: 'x',\
+           4: '/',\
+           5: 'sin',\
+           6: 'cos'}
+
+
 
 OP_ENC_DIM = len(ops.keys())*len(precs.keys()) 
 OP_ENC     = {} 

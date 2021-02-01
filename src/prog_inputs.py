@@ -32,7 +32,7 @@ def gen_stratified_inputs(prog, samp_sz, max_mag):
                if (is_const):
                    samp_inputs.append(rand.uniform(-1.0 * (10.0**mag), 10.0**mag))
                else:
-                   samp_inputs.append(0.0)
+                   samp_inputs.append(None)   # FIXME 0.0)
            inputs.append(samp_inputs)
 
    return inputs   

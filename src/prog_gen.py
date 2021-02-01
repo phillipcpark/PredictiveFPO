@@ -228,7 +228,8 @@ gen_src = {'op_new': conn_new_op,
            'const_exist': conn_exist_const}
 
 
-# FIXME FIXME FIXME are discrepancies in list ordering causing poor performance?
+
+# FIXME FIXME FIXME make sure exec list is in order, and L-R parent order is observed
 def gen_exec_list(prog_g):
 
     # gen exec order from traversal   
@@ -251,7 +252,7 @@ def gen_exec_list(prog_g):
         parent_idxs = [visit_idx[parent] for parent in parents]
 
         operation = emit_op[node_type](node_idx, node_type, parent_idxs) 
-        exec_list.append(operation)  
+        exec_list.append(operation)
 
     return exec_list
 
