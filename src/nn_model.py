@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import dgl
 from copy import deepcopy
 
+from collections import OrderedDict
+
 from params import *
 import sys
 from tr_eval_model import *
@@ -44,36 +46,56 @@ class fwd_mpgnn(nn.Module):
         #
         self.d1_comb_embed  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d1_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_comb_embed2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_comb_embed  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d2_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_comb_embed2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_comb_embed  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d3_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_comb_embed2 = resnet(hidden_dim, hidden_dim)
 
         #
         self.d1_node_embeds = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d1_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_node_embeds2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_node_embeds = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d2_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_node_embeds2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_node_embeds = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d3_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_node_embeds2 = resnet(hidden_dim, hidden_dim)
 
         #
         self.d1_mp_unary = resnet(hidden_dim, hidden_dim)
         self.d1_mp_unary1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_mp_unary2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_mp_unary = resnet(hidden_dim, hidden_dim)
         self.d2_mp_unary1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_mp_unary2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_mp_unary = resnet(hidden_dim, hidden_dim)
         self.d3_mp_unary1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_mp_unary2 = resnet(hidden_dim, hidden_dim)
 
         #
         self.d1_mp_binary  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d1_mp_binary1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_mp_binary2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_mp_binary  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d2_mp_binary1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_mp_binary2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_mp_binary  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d3_mp_binary1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_mp_binary2 = resnet(hidden_dim, hidden_dim)
 
-
+         
 
     #
     def apply_func(self, nodes):                              
@@ -93,23 +115,32 @@ class fwd_mpgnn(nn.Module):
             if (nodes.data['fwd_depth'][0] == 0):
                 embeds  = self.act(self.d1_node_embeds(concat_feats))
                 embeds  = self.act(self.d1_node_embeds1(embeds))  
+                #embeds  = self.act(self.d1_node_embeds2(embeds))  
+
             elif (nodes.data['fwd_depth'][0] == 1):
                 embeds  = self.act(self.d2_node_embeds(concat_feats))
                 embeds  = self.act(self.d2_node_embeds1(embeds))  
+                #embeds  = self.act(self.d2_node_embeds2(embeds))  
+
             else:
                 embeds  = self.act(self.d3_node_embeds(concat_feats))
                 embeds  = self.act(self.d3_node_embeds1(embeds))  
+                #embeds  = self.act(self.d3_node_embeds2(embeds))  
 
             if ('fwd_node_embeds' in nodes.data.keys()):           
                 if (nodes.data['fwd_depth'][0] == 0):
                     embeds = self.act(self.d1_comb_embed(th.cat((embeds, op_embeds), axis=-1)))
                     embeds = self.act(self.d1_comb_embed1(embeds)) 
+                    #embeds = self.act(self.d1_comb_embed2(embeds)) 
+
                 elif (nodes.data['fwd_depth'][0] == 1):
                     embeds = self.act(self.d2_comb_embed(th.cat((embeds, op_embeds), axis=-1)))
                     embeds = self.act(self.d2_comb_embed1(embeds)) 
+                    #embeds = self.act(self.d2_comb_embed2(embeds)) 
                 else: 
                     embeds = self.act(self.d2_comb_embed(th.cat((embeds, op_embeds), axis=-1)))
                     embeds = self.act(self.d2_comb_embed1(embeds)) 
+                    #embeds = self.act(self.d2_comb_embed2(embeds)) 
 
         return {'fwd_node_embeds': embeds}
 
@@ -129,12 +160,16 @@ class fwd_mpgnn(nn.Module):
             if (nodes.data['fwd_depth'][0] == 0):
                 msgs_redux = self.act(self.d1_mp_unary(nodes.mailbox['fwd_msgs']))
                 msgs_redux  = self.act(self.d1_mp_unary1(msgs_redux))
+                #msgs_redux  = self.act(self.d1_mp_unary2(msgs_redux))
+
             elif (nodes.data['fwd_depth'][0] == 1):
                 msgs_redux = self.act(self.d2_mp_unary(nodes.mailbox['fwd_msgs']))
                 msgs_redux  = self.act(self.d2_mp_unary1(msgs_redux))
+                #msgs_redux  = self.act(self.d2_mp_unary2(msgs_redux))
             else:
                 msgs_redux = self.act(self.d3_mp_unary(nodes.mailbox['fwd_msgs']))
                 msgs_redux  = self.act(self.d3_mp_unary1(msgs_redux))
+                #msgs_redux  = self.act(self.d3_mp_unary2(msgs_redux))
 
         else:
             msgs_concat = nodes.mailbox['fwd_msgs'].reshape((node_count, 1, 2*self.hidden_dim))
@@ -142,14 +177,16 @@ class fwd_mpgnn(nn.Module):
             if (nodes.data['fwd_depth'][0] == 0):
                 msgs_redux  = self.act(self.d1_mp_binary(msgs_concat)) 
                 msgs_redux  = self.act(self.d1_mp_binary1(msgs_redux))
+                #msgs_redux  = self.act(self.d1_mp_binary2(msgs_redux))
             elif (nodes.data['fwd_depth'][0] == 1):
                 msgs_redux  = self.act(self.d2_mp_binary(msgs_concat)) 
                 msgs_redux  = self.act(self.d2_mp_binary1(msgs_redux))
+                #msgs_redux  = self.act(self.d2_mp_binary2(msgs_redux))
+
             else:
                 msgs_redux  = self.act(self.d2_mp_binary(msgs_concat)) 
                 msgs_redux  = self.act(self.d2_mp_binary1(msgs_redux))
-
-
+                #msgs_redux  = self.act(self.d2_mp_binary2(msgs_redux))
         return {'fwd_msgs_redux': msgs_redux}
 
     #
@@ -185,26 +222,41 @@ class bwd_mpgnn(nn.Module):
         #
         self.d1_mp_bwd  = resnet(hidden_dim, hidden_dim)
         self.d1_mp_bwd1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_mp_bwd2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_mp_bwd  = resnet(hidden_dim, hidden_dim)
         self.d2_mp_bwd1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_mp_bwd2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_mp_bwd  = resnet(hidden_dim, hidden_dim)
         self.d3_mp_bwd1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_mp_bwd2 = resnet(hidden_dim, hidden_dim)
 
         #
         self.d1_node_embeds  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d1_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_node_embeds2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_node_embeds  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d2_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_node_embeds2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_node_embeds  = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d3_node_embeds1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_node_embeds2 = resnet(hidden_dim, hidden_dim)
 
         #
         self.d1_comb_embed = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d1_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d1_comb_embed2 = resnet(hidden_dim, hidden_dim)
+
         self.d2_comb_embed = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d2_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d2_comb_embed2 = resnet(hidden_dim, hidden_dim)
+
         self.d3_comb_embed = resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)
         self.d3_comb_embed1 = resnet(hidden_dim, hidden_dim)
+        #self.d3_comb_embed2 = resnet(hidden_dim, hidden_dim)
 
 
     #
@@ -217,12 +269,15 @@ class bwd_mpgnn(nn.Module):
             if (nodes.data['bwd_depth'][0] == 0):
                 embeds = self.act(self.d1_comb_embed(th.cat((embeds, nodes.data['bwd_node_embeds']), axis=-1)))
                 embeds = self.act(self.d1_comb_embed1(embeds)) 
+                #embeds = self.act(self.d1_comb_embed2(embeds)) 
             elif (nodes.data['bwd_depth'][0] == 1):
                 embeds = self.act(self.d2_comb_embed(th.cat((embeds, nodes.data['bwd_node_embeds']), axis=-1)))
                 embeds = self.act(self.d2_comb_embed1(embeds)) 
+                #embeds = self.act(self.d2_comb_embed2(embeds)) 
             else: 
                 embeds = self.act(self.d3_comb_embed(th.cat((embeds, nodes.data['bwd_node_embeds']), axis=-1)))
                 embeds = self.act(self.d3_comb_embed1(embeds)) 
+                #embeds = self.act(self.d3_comb_embed2(embeds)) 
 
         if ('bwd_msgs_redux' in nodes.data.keys()):             
             concat_feats = th.cat((embeds, nodes.data['bwd_msgs_redux'].reshape((node_count, self.hidden_dim))), -1)
@@ -230,12 +285,16 @@ class bwd_mpgnn(nn.Module):
             if (nodes.data['bwd_depth'][0] == 0):
                 embeds       = self.act(self.d1_node_embeds(concat_feats))
                 embeds       = self.act(self.d1_node_embeds1(embeds))
+                #embeds       = self.act(self.d1_node_embeds2(embeds))
             elif (nodes.data['bwd_depth'][0] == 1):
                 embeds       = self.act(self.d2_node_embeds(concat_feats))
                 embeds       = self.act(self.d2_node_embeds1(embeds))
+                #embeds       = self.act(self.d2_node_embeds2(embeds))
             else:
                 embeds       = self.act(self.d3_node_embeds(concat_feats))
                 embeds       = self.act(self.d3_node_embeds1(embeds))
+                #embeds       = self.act(self.d3_node_embeds2(embeds))
+
 
         return {'bwd_node_embeds': embeds}
 
@@ -251,12 +310,15 @@ class bwd_mpgnn(nn.Module):
         if (nodes.data['bwd_depth'][0] == 0):
             msgs_redux = self.act(self.d1_mp_bwd(msgs_sum))
             msgs_redux = self.act(self.d1_mp_bwd1(msgs_redux))
+            #msgs_redux = self.act(self.d1_mp_bwd2(msgs_redux))
         elif (nodes.data['bwd_depth'][0] == 1):
             msgs_redux = self.act(self.d2_mp_bwd(msgs_sum))
             msgs_redux = self.act(self.d2_mp_bwd1(msgs_redux))
+            #msgs_redux = self.act(self.d2_mp_bwd2(msgs_redux))
         else:
             msgs_redux = self.act(self.d3_mp_bwd(msgs_sum))
             msgs_redux = self.act(self.d3_mp_bwd1(msgs_redux))
+            #msgs_redux = self.act(self.d3_mp_bwd2(msgs_redux))
 
         return {'bwd_msgs_redux': msgs_redux}
 
@@ -292,6 +354,7 @@ class bid_mpgnn(nn.Module):
 
         self.fwd_nets = nn.ModuleList([fwd_mpgnn(in_dim, hidden_dim)])
         self.bwd_nets = nn.ModuleList([bwd_mpgnn(in_dim, hidden_dim)])
+
         self.comb_embeds = nn.ModuleList([resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)])
 
         if not(TIE_MP_PARAMS):        
@@ -302,7 +365,70 @@ class bid_mpgnn(nn.Module):
 
         self.predict  = resnet(hidden_dim, hidden_dim, out_dim)
 
- 
+
+
+    # FIXME FIXME
+    def load_hier_state(self, flat_dict):
+        fwd_sd = OrderedDict() 
+        bwd_sd = OrderedDict()
+        comb_sd = OrderedDict()
+        pred_sd = OrderedDict()
+
+        for k, v in flat_dict.items():
+            net_id = k.split('.')[0]
+
+            if net_id == 'fwd_nets':
+                fwd_sd[k[9:]] = v
+            elif(net_id == 'bwd_nets'):
+                bwd_sd[k[9:]] = v
+            elif(net_id == 'comb_embeds'):
+                comb_sd[k[12:]] = v
+            elif(net_id == 'predict'):
+                pred_sd[k[8:]] = v
+            else:
+                print("unidentified key")
+
+        for fwd_idx in range(MP_STEPS):             
+            step_sd = OrderedDict()
+
+            for k, v in fwd_sd.items():
+                step_id = int(k.split('.')[0])
+               
+                if (step_id == fwd_idx):
+                    #NOTE NOTE assumes MP_STEPS < 10!!
+                    step_sd[k[2:]] = v
+
+            self.fwd_nets[fwd_idx].load_state_dict(step_sd, strict=True)
+
+        for bwd_idx in range(MP_STEPS):             
+            step_sd = OrderedDict()
+
+            for k, v in bwd_sd.items():
+                step_id = int(k.split('.')[0])
+               
+                if (step_id == bwd_idx):
+
+                    #NOTE NOTE assumes MP_STEPS < 10!!
+                    step_sd[k[2:]] = v
+            self.bwd_nets[bwd_idx].load_state_dict(step_sd, strict=True)
+
+
+        pred_net_sd = OrderedDict()
+
+        for comb_idx in range(MP_STEPS):
+            step_sd = OrderedDict()
+            for k, v in comb_sd.items():
+                step_id = int(k.split('.')[0])                            
+                if (step_id == comb_idx):
+                    #NOTE NOTE assumes MP_STEPS < 10!
+                    step_sd[k[2:]] = v   
+
+            self.comb_embeds[comb_idx].load_state_dict(step_sd, strict=True)
+        
+        self.predict.load_state_dict(pred_sd, strict=True)
+
+
+    # 
     def forward(self, graph, use_gpu):
 
         rev_graph = graph.reverse(share_ndata=True, share_edata=True) 

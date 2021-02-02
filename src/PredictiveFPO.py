@@ -196,7 +196,9 @@ if __name__ == '__main__':
     
     output_targ_stats(labels)
 
+    #FIXME FIXME
     bid_mpgnn = train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
+
     mpgnn_test_eval(bid_mpgnn,g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
 
 

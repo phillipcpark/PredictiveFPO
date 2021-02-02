@@ -9,54 +9,70 @@ from mpmath import mp
 
 import random as rand
 
-# 0, 0,,
-# 1, 0,,
-# 2, 0,,      (1)
-# 3, 3, 0, 0
-# 4, 1, 3, 2   
-# 5, 0,,      (3) 
-# 6, 3, 5, 0
-# 7, 3, 6, 0
-# 8, 0,,      (2)
-# 9, 3, 8, 1
-# 10, 1, 7, 9
-# 11, 2, 10, 0   
-# 12, 0,,      (3)
-# 13, 0,,      (2)
-# 14, 3, 12, 0
-# 15, 3, 14, 0
-# 16, 3, 13, 1
-# 17, 2, 15, 16
-# 18, 2, 17, 0   
-# 19, 4, 11, 4 
-# 20, 4, 18, 4 
-# 21, 0,       (2)
-# 22, 3, 21, 0
-# 23, 3, 22, 19
-# 24, 0,        (3)
-# 25, 2, 19, 24
-# 26, 3, 23, 25
-# 27, 0,        (4)
-# 28, 3, 27, 19
-# 29, 0,        (6)
-# 30, 2, 28, 29
-# 31, 3, 0,  0
-# 32, 3, 31, 30
-# 33, 1, 26, 32
-# 34, 3, 33, 4
-# 35, 0,        (3)
-# 36, 3, 35, 0
-# 37, 3, 36, 0
-# 38, 3, 37, 19
-# 39, 1, 34, 38
-# 40, 3, 0,  0
-# 41, 3, 40, 0
-# 42, 1, 39, 41
-# 43, 1, 42, 0
-# 44, 0,        (3)
-# 45, 3, 44, 20
-# 46, 1, 43, 45
-# 47, 1, 0,  46
+# <= -1.57079632679 x 1.57079632679))    
+#x - (((x * x) * x) / 6.0) 
+#+ (((((x * x) * x) * x) * x) / 120.0) 
+#- (((((((x * x) * x) * x) * x) * x) * x) / 5040.0);
+
+# 0,  x
+# 1,  6.0
+# 2,  120.0
+# 3,  5040.0
+
+# 4, MUL, 0, 0
+# 5, MUL, 4, 0
+# 6, DIV, 5, 1
+# 7, SUB, 0, 6
+
+# 8, MUL, 0, 0
+# 9, MUL, 8, 0
+# 10, MUL, 9, 0
+# 11, MUL, 10, 0
+# 12, DIV, 11, 2
+# 13, ADD, 7, 12
+
+# 14, MUL, 0, 0
+# 15, MUL, 14, 0
+# 16, MUL, 15, 0
+# 17, MUL, 16, 0
+# 18, MUL, 17, 0
+# 19, MUL, 18, 0
+# 20, DIV, 19, 3
+# 21, SUB, 13, 20
+
+#  err_thresh for SP failure: 0.0000000001
+
+def sine_app():
+    edges = [ [0, 4], [0, 4], [4, 5], [0,5], [5,6], [1,6], [0,7], [6,7],\
+              [0,8], [0,8], [8,9], [0,9], [9,10], [0,10], [10,11], [0,11], [11,12], [2,12],\
+              [7,13], [12,13], [0,14], [0,14], [14,15], [0,15], [15,16], [0,16], [16,17], [0,17],\
+              [17,18], [0,18], [18,19], [0,19], [19,20], [3,20], [13,21], [20,21]] 
+
+
+    n_ops = [0, 0, 0, 0, 3, 3, 4, 2, 3, 3, 3, 3, 4, 1, \
+             3, 3, 3, 3, 3, 3, 4, 2]
+
+    consts = [None for i in range(len(n_ops))]
+    consts[1] = 6.0
+    consts[2] = 120.0
+    consts[3] = 5040.0
+
+    unary_masks = [False for op in n_ops] 
+  
+    return edges, n_ops, unary_masks, consts
+
+def gen_sine_inputs(consts, samp_sz):
+    inputs = []
+
+    for samp in range(samp_sz):
+        x1 = rand.uniform(-1.57079632679, 1.57079632679) 
+        curr_inputs = [c for c in consts]
+        curr_inputs[0] = x1
+        inputs.append(curr_inputs)
+    return inputs 
+
+
+
 
 def jet_app():
    
@@ -103,54 +119,7 @@ def gen_jet_inputs(consts, samp_sz):
 
 # kepler1
 #    4 vars in [4, 159/25]
-
-#    x1 * x4 
-#  * (((-x1 + x2) + x3) - x4) 
-#  + (x2 * (((x1 - x2) + x3) + x4))
-#  + (x3 * (((x1 + x2) - x3) + x4)) 
-#  - ((x2 * x3) * x4) 
-#  - (x1 * x3)
-#  - (x1 * x2)
-#  - x4;
-
-#0, 0        #x1      
-#1, 0        #x2      
-#2, 0        #x3
-#3, 0        #x4      
-#4, 0        # -1.0
-#
-#5, MUL, 0, 3
-#
-#6, MUL, 4, 0     *
-#7, ADD, 6, 1     *
-#8, ADD, 7, 2     *
-#9, SUB, 8, 3   
-#10, MUL, 5, 9
-#
-#11, SUB, 0, 1    *
-#12, ADD, 11, 2  
-#13, ADD, 12, 3  
-#14, MUL, 1, 13
-#15, ADD, 10, 14  
-#
-#16, ADD, 0, 1    *
-#17, SUB, 16, 2  
-#18, ADD, 17, 3  
-#19, MUL, 2, 18
-#20, ADD, 15, 19
-#
-#21, MUL, 1, 2    *
-#22, MUL, 21, 3
-#23, SUB, 20, 22  *
-#
-#24, MUL, 0, 2    *
-#25, SUB, 23, 24  
-#
-#26, MUL, 0, 1    *
-#27, SUB, 25, 26
-#
-#28, SUB, 27, 3 
-
+# err_thresh for SP failure 0.000000001
 
 def kep1_app():
     edges = [[0,5], [3,5], [4,6], [0,6], [1,7], [6,7], [7,8], [2,8], [8,9], [3,9], [5,10], [9,10],\
@@ -190,6 +159,56 @@ def gen_kep1_inputs(consts, samp_sz):
     return inputs 
 
 
+# kepler2
+#    4 vars in [4, 159/25]
+# err thresh for SP failure: 0.000000001
+
+def kep2_app():
+    edges = [ [0, 7], [3,7], [6,8], [0,8], [8,9],[1,9], [9,10], [2,10], [10, 11], [3, 11], [11, 12],\
+              [4, 12], [12, 13], [5, 13], [7,14], [13, 14], [1, 15], [4, 15], [0,16], [1, 16], [16, 17], [2, 17], \
+              [17, 18], [3,18], [18,19], [4,19], [19,20], [5,20], [15,21], [20,21], [14,22], [21,22], \
+              [2,23], [5,23], [0,24], [1,24], [24,25], [2,25], [25,26], [3,26], [26,27], [4,27], [27, 28], [5,28], [23,29], [28,29],\
+              [22,30], [29,30], [1, 31], [2, 31], [31, 32], [3, 32], [30, 33], [32, 33], [0,34], [2,34], [34,35], [4,35], [33,36], [35,36], \
+              [0, 37], [1, 37], [37, 38], [5, 38], [36, 39], [38,39], [3, 40], [4, 40], [40, 41], [5, 41], [39, 42], [41, 42]] 
+
+    n_ops = [0, 0, 0, 0, 0, 0, 0, \
+             3, 3, 1, 1, 2, 1, 1, 3, \
+             3, 2, 1, 1, 2, 1, 3, 1, \
+             3, 1, 2, 1, 1, 2, 3, 1, \
+             3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2] 
+
+    consts = [None for i in range(len(n_ops))]
+    consts[6] = -1.0
+  
+    unary_masks = [False for i in range(len(n_ops))]
+
+    return edges, n_ops, unary_masks, consts 
+
+# 
+def gen_kep2_inputs(consts, samp_sz):
+    inputs = []
+
+    for samp in range(samp_sz):
+        x1 = rand.uniform(4.0, 159.0/25.0)
+        x2 = rand.uniform(4.0, 159.0/25.0)
+        x3 = rand.uniform(4.0, 159.0/25.0)
+        x4 = rand.uniform(4.0, 159.0/25.0)
+        x5 = rand.uniform(4.0, 159.0/25.0)
+        x6 = rand.uniform(4.0, 159.0/25.0)
+
+        curr_inputs = [c for c in consts]
+        curr_inputs[0] = x1
+        curr_inputs[1] = x2
+        curr_inputs[2] = x3
+        curr_inputs[3] = x4
+        curr_inputs[4] = x3
+        curr_inputs[5] = x4
+
+        inputs.append(curr_inputs)
+    return inputs 
+
+
+
 # b2 = b * b;
 # b4 = b2 * b2;
 # b6 = b4 * b2;
@@ -220,7 +239,7 @@ def rump_app():
 #feat_dim = OP_ENC_NOPREC_DIM if SINGLE_GRAPH_TARG else OP_ENC_DIM
 #gnn = bid_mpgnn(feat_dim, H_DIM, CLASSES)
 #
-#edges, feats, unary_masks, consts = kep1_app()
+#edges, feats, unary_masks, consts = jet_app()
 #ex_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], [feats], use_gpu=False)        
 #
 #_, top_order = gnn(ex_graph, False)
@@ -239,16 +258,16 @@ def rump_app():
 #    exec_list[insn[0]] = insn
 #
 #
-#inputs = gen_kep1_inputs(consts, input_samp_sz) 
+#inputs = gen_jet_inputs(consts, 100000) 
 #
 #gt_otc = gen_spec_otc(exec_list, precs_inv[2])
-#sp_otc = gen_spec_otc(exec_list, precs_inv[0]) #precs_inv[0])
+#sp_otc = gen_spec_otc(exec_list, precs_inv[0])
 #
 #
 #
 ##FIXME
-##print_for_gviz(ex_graph.to_networkx(), exec_list, gt_otc)
-##sys.exit(0)
+#print_for_gviz(ex_graph.to_networkx(), exec_list, gt_otc)
+#sys.exit(0)
 #
 #
 #ex_errs = []
@@ -257,22 +276,16 @@ def rump_app():
 #    result      = sim_prog(exec_list, ins, sp_otc)
 #    shad_result = sim_prog(exec_list, ins, gt_otc) 
 #    err = relative_error(result, shad_result)
-#
-#    print(err)
-#   
+#  
 #    mp.prec = 80
 #    err = mp.mpf( abs((result - shad_result) / shad_result ))
 #    ex_errs.append(err)
-#
-#    print(err)
-#    sys.exit(0)
-#
 #
 #accept, gt_thresh_prop = accept_err(ex_errs)
 #
 #print("\naccept, prop>thresh: " + str(accept) + " " + str(gt_thresh_prop))
 #print("max_err: " + str(np.amax(ex_errs)))
-#
-#
-#
-#
+
+
+
+
