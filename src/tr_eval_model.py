@@ -7,7 +7,7 @@ from prog_sim import *
 
 from apps import *
 
-
+import scipy.stats as stats 
 from collections import OrderedDict
 from collections import Counter
 import sys
@@ -174,7 +174,7 @@ def get_dev():
 
 
 # check whether or not all-SP and gt solutions work, as well as if GT throws exception
-def check_init_sols(exec_list, inputs, orig_otc):
+def check_init_sols(exec_list, inputs, orig_otc, return_err_props=False, return_errs=False):
 
     triv_errs = []
     orig_errs = []
@@ -188,6 +188,10 @@ def check_init_sols(exec_list, inputs, orig_otc):
 
         if (shad_result == None):
             #print("\tground truch OTC threw exception")
+            if return_err_props:
+                if (return_errs):
+                    return False, None, None, None, None
+                return False, None, None
             return False
 
         triv_result = sim_prog(exec_list, ins, triv_otc)
@@ -198,21 +202,40 @@ def check_init_sols(exec_list, inputs, orig_otc):
         
         # original solution threw exception
         if (orig_result == None):
+            if (return_err_props):
+                if (return_errs):
+                    return False, None, None, None, None
+                return False, None, None
             return False
         else:
             orig_errs.append(relative_error(orig_result, shad_result))            
  
-    accept, gt_thresh_prop = accept_err(orig_errs)
+    accept, og_gt_prop = accept_err(orig_errs)
     if not(accept):
         #print("\torig solution didn't work for prop of inputs")
+        if (return_err_props):
+            if (return_errs):
+                return False, None, None, None, None
+            return False, None, None
         return False
 
-    accept, gt_thresh_prop = accept_err(triv_errs)
+    accept, triv_gt_prop = accept_err(triv_errs)
     if (accept):
-        #print("\ttrivial worked for prop of inputs")        
-        return False   
-    return True
 
+        # FIXME FIXME FIXME accepting trivial for now, until we can distinguish failures
+        if (return_err_props):
+            if (return_errs):
+                return True, triv_gt_prop, og_gt_prop, triv_errs, orig_errs
+            return True, triv_gt_prop, og_gt_prop
+        return True  
+            #return False, triv_gt_prop, og_gt_prop
+        #return False   
+
+    if (return_err_props):
+        if (return_errs):
+            return True, triv_gt_prop, og_gt_prop, triv_errs, orig_errs
+        return True, triv_gt_prop, og_gt_prop
+    return True
 
 #
 def update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig):    
@@ -386,14 +409,13 @@ def train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
 
 
 #
-def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs):
+def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs, BASE_PATH):
         
     print("\n**********test phase*************")
  
     example_count = len(feats)
     BAT_COUNT = int((example_count * TR_DS_PROP) / BAT_SZ) 
     VALID_SZ  = int(example_count * VAL_DS_PROP)  
-
 
 
     tst_idxs = []
@@ -404,9 +426,7 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         mod_dev = get_dev() if USE_GPU else th.device('cpu')
         state_dict = th.load(MOD_PATH, map_location=mod_dev)
 
-        #FIXME FIXME
         gnn.to(get_dev())
-        #gnn.load_state_dict(state_dict, strict=False)       
         gnn.load_hier_state(state_dict)
         gnn.to('cpu')
 
@@ -445,6 +465,10 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     tst_recs = []
 
 
+    sp_err_props   = []
+    og_err_props   = []
+    tune_err_props = []
+
     for tst_idx in range(len(tst_idxs)):         
 
         if (all_count >= MAX_TST_PROGS):
@@ -465,8 +489,7 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         sm = nn.Softmax(dim=-1)
         predicts = sm(th.sigmoid(predicts))
 
-        # print predicts 
-        
+        # print predicts         
         if (tst_idx < 8):
             print("")
             for p_idx in range(len(predicts)):
@@ -481,7 +504,6 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
             for n in step:       
                 rec = int(np.argmax(predicts[n].detach()))
 
-                # FIXME FIXME is parent ordering observed for non commutative ops?
                 parents = [int(v) for v in ex_graph.in_edges(n)[0]]
 
                 if (len(parents) < 2):
@@ -509,11 +531,15 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
                         else:
                             otc_tuned[n] = precs_inv[tune_prec(ex_feats[n][1], rec)]
                                           
-        inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
+        #inputs = gen_stratified_inputs(exec_list, input_samp_sz, inputs_mag) 
+        inputs = load_inputs(BASE_PATH + "/inputs_" + str(ex_idx) +".csv") 
+        inputs = [pad_inputs(exec_list, ins) for ins in inputs]
 
-        # skip example if either trivial sol works, shadow throws except, orig sol throws except         
-        if not(check_init_sols(exec_list, inputs, otc_orig)):
-            continue
+        viable, sp_prop, og_prop, sp_errs, og_errs = check_init_sols(exec_list, inputs, otc_orig, return_err_props=True, return_errs=True)
+
+        # skip example if either trivial sol works, shadow throws except, orig sol throws except       
+        if not(viable):
+             continue        
 
         prec, rec = prec_recall(predicts, ex_label)
         tst_precs.append(prec)
@@ -528,7 +554,7 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
             ex_errs.append(relative_error(result, shad_result))
         all_count += 1
 
-        accept, gt_thresh_prop = accept_err(ex_errs)
+        accept, tune_gt_prop = accept_err(ex_errs)
         if (accept):
             all_prop_count += 1
 
@@ -536,16 +562,20 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
                 tune_counts[np.argmax(pred.detach().numpy())] += 1
             if not(SINGLE_GRAPH_TARG):
                 update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig)   
-            
 
+        sp_err_props.append(sp_prop)
+        og_err_props.append(og_prop)
+        tune_err_props.append(tune_gt_prop)   
 
     if (all_count > 0):
         print("\n**test prog count: " + str(all_count) + "\n")     
         print("**proportion within thresh, for proportion of inputs " + str(float(all_prop_count) / float(all_count)))
+        print("\n**avg sp_err_prop: " + str(np.mean(sp_err_props)) + "**\navg tune_err_prop: " + str(np.mean(tune_err_props)) + "\n**avg OG_err_prop: " + str(np.mean(og_err_props)))
 
-        print("\ntune counts")
-        for key in tune_counts.keys():
-            print(str(key) + " " + str(tune_counts[key]))
+
+        print("\nfreq deltas after tuning")
+        for key in prec_freq_deltas.keys():
+            print(str(key) + " " + str(np.mean(prec_freq_deltas[key])))
 
         print("\navg prec-recall across tests graphs")
         avg_prec = {}
@@ -561,11 +591,21 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
             print("\t" + str(c) + ": " + str(np.mean(avg_prec[c])) + ", " + str(np.mean(avg_rec[c])))
 
 
+        #FIXME
+        #print("\n\nsp_err_props,og_err_props,tune_err_props")
+        #for i in range(len(sp_err_props)):
+        #    print(str(sp_err_props[i]) + "," + str(og_err_props[i]) +"," + str(tune_err_props[i]))
 
 
+
+    #
     #
     # eval on fpb
     #
+    #
+
+    print("\n**eval on fpbench\n")
+
 
     # jet
     edges, n_ops, unary_masks, consts = jet_app()
@@ -615,6 +655,7 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     sp_errs  = []   
 
     init_good = True
+
  
     for ins in inputs:
         result      = sim_prog(exec_list, ins, tuned_otc)
@@ -625,12 +666,13 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         if (shad_result == None or init_result == None):
             init_good = False
 
-        ex_errs.append(relative_error(result, shad_result))    
+        ex_errs.append(relative_error(result, shad_result))
         init_errs.append(relative_error(init_result, shad_result))
         sp_errs.append(relative_error(sp_result, shad_result))
 
-    accept_init, _ = accept_err(init_errs, or_thresh=0.0000001)
-    accept_sp, _   = accept_err(sp_errs, or_thresh=0.0000001)
+    thresh_jet = 0.00000001
+    accept_init, og_prop = accept_err(init_errs, or_thresh=thresh_jet)
+    accept_sp, sp_prop   = accept_err(sp_errs, or_thresh=thresh_jet)
 
     if not(init_good):
         print("\t****initial sol or GT threw exception!")
@@ -640,8 +682,20 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     elif (accept_sp):
         print("\t**trivial sol (all-SP) for jet was accepted!")
 
-    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=0.0000001)    
-    print("**accept model-tuned jet: " + str(accept) + ", prop > thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=thresh_jet)    
+    print("**accept model-tuned jet: " + str(accept) + ", prop < thresh: " + str(1.0-prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    print("\tsp prop > thresh: " + str(sp_prop))
+    print("\tog prop > thresh: " + str(og_prop))
+    print("\tavg err: " + str(np.mean(ex_errs)))
+
+    print("\n**jet ops and final OTC")
+    for op_idx in range(len(tuned_otc)):
+        print('op_' + str(op_idx) + ", " + str(n_ops[op_idx]) + ", " + str(tuned_otc[op_idx]))
+  
+    #print_for_gviz(dp_graph.to_networkx(), exec_list, gt_otc, [True if tuned_otc[op_idx]==32 else False for op_idx in range(len(tuned_otc))])
+
+
+
 
 
     #########
@@ -680,6 +734,7 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
 
     for p in predicts.detach().numpy():
         print(p)
+
     print("\nkep1 tuned otc: " + str(tuned_otc))
               
     gt_otc = gen_spec_otc(exec_list, precs_inv[2])    
@@ -706,8 +761,9 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         init_errs.append(relative_error(init_result, shad_result))
         sp_errs.append(relative_error(sp_result, shad_result))
 
-    accept_init, _ = accept_err(init_errs, or_thresh=0.000000001)
-    accept_sp, prop_gt_thresh   = accept_err(sp_errs, or_thresh=0.000000001)
+    thresh_kep1 = 0.0000001 #0.000000001
+    accept_init, og_prop = accept_err(init_errs, or_thresh=thresh_kep1)
+    accept_sp, sp_prop   = accept_err(sp_errs, or_thresh=thresh_kep1)
 
     if not(init_good):
         print("\t****initial sol or GT threw exception!")
@@ -715,10 +771,21 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     if not(accept_init):
         print("\t**initial sol (all-DP) for kep1 wasn't accepted!")
     elif (accept_sp):
-        print("\t**trivial sol (all-SP) for kep1 was accepted with prop " + str(prop_gt_thresh) + " > thresh and max_err: " + str(np.amax(sp_errs)))
+        print("\t**trivial sol (all-SP) for kep1 was accepted with prop " + str(1.0-sp_prop) + " < thresh and max_err: " + str(np.amax(sp_errs)))
 
-    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=0.000000001)    
-    print("**accept model-tuned kep1: " + str(accept) + " prop>thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=thresh_kep1)    
+    print("**accept model-tuned kep1: " + str(accept) + " prop<thresh: " + str(1.0-prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    print("\tsp prop > thresh: " + str(sp_prop))
+    print("\tog prop > thresh: " + str(og_prop))
+
+    print("\tavg err: " + str(np.mean(ex_errs)))
+
+    print("\n**kep1 ops and final OTC")
+    for op_idx in range(len(tuned_otc)):
+        print('op_' + str(op_idx) + ", " + str(n_ops[op_idx]) + ", " + str(tuned_otc[op_idx]))
+    #print_for_gviz(dp_graph.to_networkx(), exec_list, gt_otc, [True if tuned_otc[op_idx]==32 else False for op_idx in range(len(tuned_otc))])
+
+
 
     #########
     # kepler2
@@ -783,8 +850,10 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
         init_errs.append(relative_error(init_result, shad_result))
         sp_errs.append(relative_error(sp_result, shad_result))
 
-    accept_init, _ = accept_err(init_errs, or_thresh=0.000000001 )
-    accept_sp, prop_gt_thresh   = accept_err(sp_errs,  or_thresh=0.000000001)
+    thresh_kep2 = 0.000000001 #0.000000001 
+
+    accept_init, prop_og = accept_err(init_errs, or_thresh=thresh_kep2 )
+    accept_sp, prop_sp   = accept_err(sp_errs,  or_thresh=thresh_kep2)
 
     if not(init_good):
         print("\t****initial sol or GT threw exception!")
@@ -792,36 +861,36 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
     if not(accept_init):
         print("\t**initial sol (all-DP) for kep2 wasn't accepted!")
     elif (accept_sp):
-        print("\t**trivial sol (all-SP) for kep2 was accepted with prop " + str(prop_gt_thresh) + " > thresh and max_err: " + str(np.amax(sp_errs)))
+        print("\t**trivial sol (all-SP) for kep2 was accepted with prop " + str(prop_sp) + " > thresh and max_err: " + str(np.amax(sp_errs)))
 
-    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=0.000000001)    
-    print("**accept model-tuned kep2: " + str(accept) + " prop>thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=thresh_kep2)    
+    print("**accept model-tuned kep2: " + str(accept) + " prop<thresh: " + str(1.0-prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
+    print("\tsp prop < thresh: " + str(1.0-prop_sp))
+    print("\tog prop < thresh: " + str(1.0-prop_og))
+
+    print("\n**k2p ops and final OTC")
+    for op_idx in range(len(tuned_otc)):
+        print('op_' + str(op_idx) + ", " + str(n_ops[op_idx]) + ", " + str(tuned_otc[op_idx]))
+    #print_for_gviz(dp_graph.to_networkx(), exec_list, gt_otc, [True if tuned_otc[op_idx]==32 else False for op_idx in range(len(tuned_otc))])
 
 
-    #########
-    # sine
-    #########
+    print("\tavg err: " + str(np.mean(ex_errs)))
 
-    edges, n_ops, unary_masks, consts = sine_app()
-    inputs = gen_sine_inputs(consts, input_samp_sz) 
 
-    # create exec list            
-    exec_list = []    
-    for n in range(len(n_ops)): 
-        parents = [e[0] for e in edges if e[1] == n]
-        if (len(parents) < 2):                       
-            if (len(parents) < 1): 
-                parents.append(None) 
-            parents.append(None) 
-        exec_list.append([int(n), n_ops[n], parents[0], parents[1]])
+    #
+    # AL
+    #
+    edges, n_ops, unary_masks, consts = al_bbfun()
 
-    # make prediction
     dp_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], 
                                       [ [[op,1] for op in n_ops] ], use_gpu=False)            
 
     predicts, _ = gnn(dp_graph, False)
     sm = nn.Softmax(dim=-1)
     predicts = sm(th.sigmoid(predicts))
+
+    for p in predicts.detach().numpy():
+        print(p)
 
     tuned_otc = [64 for i in range(len(predicts))]
 
@@ -832,50 +901,40 @@ def mpgnn_test_eval(gnn, g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs
            if (predicts.detach().numpy()[p_idx][rec] >= PRED_THRESH and rec==1):
                tuned_otc[p_idx] = 32
 
+    print("\nal tuned otc")
+    for op_idx in range(len(tuned_otc)):
+        print('op_' + str(op_idx) + ", " + str(n_ops[op_idx]) + ", " + str(tuned_otc[op_idx]))
+
+
+
+    #
+    # simpsons
+    #
+    edges, n_ops, unary_masks, consts = simps_bb()
+
+    dp_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], 
+                                      [ [[op,1] for op in n_ops] ], use_gpu=False)            
+
+    predicts, _ = gnn(dp_graph, False)
+    sm = nn.Softmax(dim=-1)
+    predicts = sm(th.sigmoid(predicts))
+
     for p in predicts.detach().numpy():
         print(p)
 
-    print("\nsine tuned otc: " + str(tuned_otc))
+    tuned_otc = [64 for i in range(len(predicts))]
+
+    for p_idx in range(len(predicts)):
+       if not(n_ops[p_idx] == ops['CONST']):
+           rec = int(np.argmax(predicts[p_idx].detach()))  
+
+           if (predicts.detach().numpy()[p_idx][rec] >= PRED_THRESH and rec==1):
+               tuned_otc[p_idx] = 32
+
+    print("\nsimpson's tuned otc")
+    for op_idx in range(len(tuned_otc)):
+        print('op_' + str(op_idx) + ", " + str(n_ops[op_idx]) + ", " + str(tuned_otc[op_idx]))
+
+
               
-    gt_otc = gen_spec_otc(exec_list, precs_inv[2])    
-    init_otc = gen_spec_otc(exec_list, precs_inv[1])
-    sp_otc = gen_spec_otc(exec_list, precs_inv[0])
-
-    ex_errs = []
-    init_errs = []
-    sp_errs  = []   
-
-    init_good = True
- 
-    for ins in inputs:
-        result      = sim_prog(exec_list, ins, tuned_otc)
-        shad_result = sim_prog(exec_list, ins, gt_otc) 
-        init_result = sim_prog(exec_list, ins, init_otc)
-        sp_result   = sim_prog(exec_list, ins, sp_otc)
-
-        if (shad_result == None or init_result == None):
-            init_good = False 
-            continue
-
-        ex_errs.append(relative_error(result, shad_result))    
-        init_errs.append(relative_error(init_result, shad_result))
-        sp_errs.append(relative_error(sp_result, shad_result))
-
-    accept_init, _ = accept_err(init_errs, or_thresh= 0.0000000001 )
-    accept_sp, prop_gt_thresh   = accept_err(sp_errs,  or_thresh=0.0000000001)
-
-    if not(init_good):
-        print("\t****initial sol or GT threw exception!")
-
-    if not(accept_init):
-        print("\t**initial sol (all-DP) for sine wasn't accepted!")
-    elif (accept_sp):
-        print("\t**trivial sol (all-SP) for sine was accepted with prop " + str(prop_gt_thresh) + " > thresh and max_err: " + str(np.amax(sp_errs)))
-
-    accept, prop_gt_thresh = accept_err(ex_errs, or_thresh=0.0000000001)    
-    print("**accept model-tuned sine: " + str(accept) + " prop>thresh: " + str(prop_gt_thresh) + ", max_err: " + str(np.amax(ex_errs)) + "\n")
-
-
-
-
 

@@ -9,37 +9,88 @@ from mpmath import mp
 
 import random as rand
 
+
+
+
+#
+# arc len
+#
+
+#    for(i=1 ; i<= n ; i++) {
+#        t2 = fun_sol(i*h);
+#        s1 = s1 + sqrt(h*h + (t2 - t1)*(t2 - t1));
+#        t1 = t2;
+#        s1_iters[i] = s1;
+#    }
+
+# FIXME FIXME need support for sqrt in model
+def al_bbmain():
+    pass
+
+
+# 0, 0   (d1)
+# 1, 0   (2.0)
+# 2, 0   (t1)
+# 3, 0   (x)
+# 
+# 4, MUL, 1, 0  (d1) 
+# 5, MUL, 4, 3
+# 6, SIN, 5
+# 7, DIV, 6, 4
+# 8, ADD, 2, 7 
+def al_bbfun():
+    edges = [ [1,4], [0,4], [4,5], [3,5], [5,6],\
+              [6,7],[4,7], [2,8],[7,8] ]
+    
+    n_ops = [0, 0, 0, 0, 3, 3, 5, 4, 1] 
+    consts = [None, 2.0, None, None, None, None, None, None, None] 
+    unary_masks = [False, False, False, False, False, False, True, False, False]
+
+    return edges, n_ops, unary_masks, consts
+
+
+
+
+#
+# simpsons
+#
+
+# 0, 0    (x)
+# 1, 0    (h)
+# 2, 0    (4)
+# 3, 0    (Pi)
+# 4, 0    (2)
+# 5, 0    (sl_iters[i-1])
+
+# 6,  ADD, 0, 1 (x)
+# 7,  MUL, 3, 6 
+# 8,  SIN, 7
+# 9,  MUL, 2, 8
+# 10, ADD, 5, 9 (sl_iters[i])
+
+# 11, ADD, 6, 1 (x)
+# 12, MUL, 3, 11
+# 13, SIN, 12
+# 14, MUL, 4, 13
+# 15, ADD, 10, 14 (sl_iters[i]) 
+
+def simps_bb(): 
+    edges = [ [0,6], [1,6], [3,7], [6,7], [7,8], [2,9], [8,9], [5,10], [9,10],\
+              [6,11], [1,11], [3,12], [11,12], [12,13], [4,14], [13,14], [10,15], [14,15] ]
+
+    n_ops    = [0, 0, 0 ,0 ,0 ,0, 1, 3, 5, 3, 1, 1, 3, 5, 3, 1]
+    unary_masks = [False, False, False, False, False, False, False, False, True, False, False,\
+                False, False, True, False, False]
+    consts = [None, None, 4.0, math.pi, 2.0, None, None, None, None, None, None, None, None, None, None, None]  
+
+    return edges, n_ops, unary_masks, consts
+
+
+
+
+
+
 # <= -1.57079632679 x 1.57079632679))    
-#x - (((x * x) * x) / 6.0) 
-#+ (((((x * x) * x) * x) * x) / 120.0) 
-#- (((((((x * x) * x) * x) * x) * x) * x) / 5040.0);
-
-# 0,  x
-# 1,  6.0
-# 2,  120.0
-# 3,  5040.0
-
-# 4, MUL, 0, 0
-# 5, MUL, 4, 0
-# 6, DIV, 5, 1
-# 7, SUB, 0, 6
-
-# 8, MUL, 0, 0
-# 9, MUL, 8, 0
-# 10, MUL, 9, 0
-# 11, MUL, 10, 0
-# 12, DIV, 11, 2
-# 13, ADD, 7, 12
-
-# 14, MUL, 0, 0
-# 15, MUL, 14, 0
-# 16, MUL, 15, 0
-# 17, MUL, 16, 0
-# 18, MUL, 17, 0
-# 19, MUL, 18, 0
-# 20, DIV, 19, 3
-# 21, SUB, 13, 20
-
 #  err_thresh for SP failure: 0.0000000001
 
 def sine_app():
@@ -73,7 +124,7 @@ def gen_sine_inputs(consts, samp_sz):
 
 
 
-
+#
 def jet_app():
    
     edges = [ 
@@ -236,13 +287,10 @@ def rump_app():
 # FIXME 
 # quick tb
 
-#feat_dim = OP_ENC_NOPREC_DIM if SINGLE_GRAPH_TARG else OP_ENC_DIM
-#gnn = bid_mpgnn(feat_dim, H_DIM, CLASSES)
+
+#edges, feats, unary_masks, consts = al_bbfun()
+#ex_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], [[[op,1] for op in feats]], use_gpu=False)        
 #
-#edges, feats, unary_masks, consts = jet_app()
-#ex_graph = batch_graphs_from_idxs([0], [edges], [unary_masks], [0], [feats], use_gpu=False)        
-#
-#_, top_order = gnn(ex_graph, False)
 #_exec_list    = []
 #
 #for n in range(len(feats)): 
@@ -257,17 +305,17 @@ def rump_app():
 #for insn in _exec_list:
 #    exec_list[insn[0]] = insn
 #
-#
-#inputs = gen_jet_inputs(consts, 100000) 
-#
 #gt_otc = gen_spec_otc(exec_list, precs_inv[2])
 #sp_otc = gen_spec_otc(exec_list, precs_inv[0])
 #
-#
-#
-##FIXME
 #print_for_gviz(ex_graph.to_networkx(), exec_list, gt_otc)
 #sys.exit(0)
+
+
+#inputs = gen_jet_inputs(consts, 100000) 
+
+#gt_otc = gen_spec_otc(exec_list, precs_inv[2])
+#sp_otc = gen_spec_otc(exec_list, precs_inv[0])
 #
 #
 #ex_errs = []

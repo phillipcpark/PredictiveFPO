@@ -1,5 +1,40 @@
 import random as rand
+import sys
+import csv
+from mpmath import mp
+from params import *
 
+#
+def is_const(opcode):
+    if (opcode == ops['CONST']):
+        return True
+    return False
+
+#
+def pad_inputs(exec_list, ins):
+    cidx = 0
+    flush_ins = []
+    for line in exec_list:
+        if is_const(line[1]):
+            flush_ins.append(ins[cidx])
+            cidx += 1
+        else:
+            flush_ins.append(None)
+    return flush_ins
+
+#
+def load_inputs(path):
+    f_hand = open(path, 'r')  
+    reader = csv.reader(f_hand, delimiter=',')
+
+    ins = []
+
+    mp.prec = 65
+    for row in reader:        
+        ins.append([mp.mpf(val) for val in row])
+    f_hand.close()
+
+    return ins
 
 # should all inputs be kept in memory? If I want to share inputs for every OTC...
 def gen_inputs(prog, samp_sz, bound_low, bound_high):
@@ -11,8 +46,9 @@ def gen_inputs(prog, samp_sz, bound_low, bound_high):
            if (is_const):
                samp_inputs.append(rand.uniform(bound_low, bound_high))
            else:
-               samp_inputs.append(0.0)
+               samp_inputs.append(None)
        inputs.append(samp_inputs)
+
    return inputs
 
 

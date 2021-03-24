@@ -1,5 +1,7 @@
 from params import *
 
+import mpmath
+from mpmath import mp
 from collections import Counter
 import numpy as np
 import sys
@@ -85,8 +87,13 @@ def prec_recall(predicts, labels):
 
 # 
 def relative_error(val_num, val_denom):       
+
+    #FIXME FIXME FIXME FIXME using MPMath for higher precision
+    mp.prec = 65
+     
+
     try:
-        return abs((val_num - val_denom) / val_denom)
+        return mpmath.fabs((val_num - val_denom) / val_denom)
     except:
         return 0.0
 

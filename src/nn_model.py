@@ -396,7 +396,10 @@ class bid_mpgnn(nn.Module):
                
                 if (step_id == fwd_idx):
                     #NOTE NOTE assumes MP_STEPS < 10!!
-                    step_sd[k[2:]] = v
+                    if (fwd_idx < 10):
+                        step_sd[k[2:]] = v
+                    else:
+                        step_sd[k[3:]] = v
 
             self.fwd_nets[fwd_idx].load_state_dict(step_sd, strict=True)
 
@@ -407,9 +410,11 @@ class bid_mpgnn(nn.Module):
                 step_id = int(k.split('.')[0])
                
                 if (step_id == bwd_idx):
-
-                    #NOTE NOTE assumes MP_STEPS < 10!!
-                    step_sd[k[2:]] = v
+                    if (bwd_idx < 10):
+                        #NOTE NOTE assumes MP_STEPS < 10!!
+                        step_sd[k[2:]] = v
+                    else:
+                        step_sd[k[3:]] = v
             self.bwd_nets[bwd_idx].load_state_dict(step_sd, strict=True)
 
 
@@ -420,8 +425,11 @@ class bid_mpgnn(nn.Module):
             for k, v in comb_sd.items():
                 step_id = int(k.split('.')[0])                            
                 if (step_id == comb_idx):
-                    #NOTE NOTE assumes MP_STEPS < 10!
-                    step_sd[k[2:]] = v   
+                    if (comb_idx < 10):
+                        #NOTE NOTE assumes MP_STEPS < 10!
+                        step_sd[k[2:]] = v   
+                    else:
+                        step_sd[k[3:]] = v
 
             self.comb_embeds[comb_idx].load_state_dict(step_sd, strict=True)
         
@@ -438,22 +446,25 @@ class bid_mpgnn(nn.Module):
 
          
         # FIXME depthwise model
-        depth_delim    = 7       
+        #depth_delim    = 11 #7       
         curr_fwd_depth = curr_bwd_depth = 0
         fwd_depth_map  = [None for i in range(len(graph.nodes()))]
         bwd_depth_map  = [None for i in range(len(graph.nodes()))]
 
         for front in fwd_topo_order:
             for node in front:
-                depth_bin = 0 if curr_fwd_depth < depth_delim else 1
-                depth_bin = 2 if curr_fwd_depth > depth_delim*2 else depth_bin
+                depth_bin = 0 if curr_fwd_depth < 10 else 1
+                if curr_fwd_depth > 20:
+                    depth_bin = 2
                 fwd_depth_map[node] = depth_bin 
             curr_fwd_depth += 1
 
         for front in rev_topo_order:
             for node in front:
-                depth_bin           = 0 if curr_bwd_depth < depth_delim else 1
-                depth_bin           = 2 if curr_bwd_depth > depth_delim*2 else depth_bin
+                depth_bin = 0 if curr_bwd_depth < 10 else 1
+                if curr_bwd_depth > 20:
+                    depth_bin = 2
+
                 bwd_depth_map[node] = depth_bin 
             curr_bwd_depth += 1
 
@@ -474,7 +485,7 @@ class bid_mpgnn(nn.Module):
         fwd_embed = self.fwd_nets[0](graph, use_gpu)
         bwd_embed = self.bwd_nets[0](rev_graph, use_gpu)
         comb      = self.comb_embeds[0](th.cat((fwd_embed, bwd_embed), axis=-1))
-          
+ 
         for mp_step in range(MP_STEPS-1):
             graph.ndata['fwd_node_embeds']     = comb
             rev_graph.ndata['bwd_node_embeds'] = comb
@@ -490,11 +501,7 @@ class bid_mpgnn(nn.Module):
         return pred, fwd_topo_order
 
 
-#FIXME FIXME sc
-#mod = bid_mpgnn(32, 32, 32)
 
-#mod.load_state_dict(th.load('0_MOD_TST_PATH'), strict=False)
-#th.save(mod.state_dict(), '0_MOD_TST_PATH')
 
 
 

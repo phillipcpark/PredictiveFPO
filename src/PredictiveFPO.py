@@ -94,7 +94,7 @@ def load_nootcfeat_ds(path):
   
 #
 def load_predfpo_ds(path):
-    f_hand = open(path, 'r')  
+    f_hand = open(path + "/ds.csv", 'r')  
     reader = csv.reader(f_hand, delimiter=',')
     next(reader) 
 
@@ -148,13 +148,14 @@ def load_predfpo_ds(path):
 
            
             elif (COARSE_TUNE):
-                classes = 5 #NOTE hardcoded
+                classes = 5 #NOTE hardcoded: assumes DS has 5 classes
                 gt_prec = max(attrs[5] + (attrs[6] - int(classes-1)/int(2)), 0) 
 
                 if (SP_TARGET):
+                    #FIXME FIXME FIXME should label be '0' if init type is '0'? 
                     labels[-1].append(1 if (gt_prec == 0) else 0)
                 else:
-                    labels[-1].append(1 if attrs[6] < int(classes-1)/int(2) else 0)
+                    labels[-1].append(1 if ((attrs[5] + (attrs[6] - int(classes-1)/int(2))) < attrs[5]) else 0)
 
             else:
                 labels[-1].append(attrs[6])
@@ -183,6 +184,83 @@ def output_targ_stats(labels):
     print("")
 
 
+# estimate P(y|depth)
+def analyze_depth(g_edges, g_idxs, feats, unary_masks, labels, shuff_idxs):
+
+    # delineates the overall height of graphs
+    overall_depths_sp = {}
+    overall_depths_all = {}
+
+    for i in range(35): 
+        d_sp_count  = {}
+        d_all_count = {}
+        for j in range(35):
+            d_sp_count[j] = 0
+            d_all_count[j] = 0
+        overall_depths_sp[i] = d_sp_count
+        overall_depths_all[i] = d_all_count            
+      
+    g_idx = None
+    for _idx in range(len(shuff_idxs)):
+        ex_idx = shuff_idxs[_idx]
+        if (g_idxs[ex_idx] == g_idx):
+            continue
+        g_idx = g_idxs[ex_idx]
+
+        g = batch_graphs_from_idxs([0], [g_edges[g_idx]], [unary_masks[g_idx]], [0],[feats[ex_idx]], use_gpu=False)        
+
+        curr_d = 0
+        top_ord = dgl.topological_nodes_generator(g)   
+        for d in top_ord:
+            curr_d += 1
+
+        g_d    = curr_d
+        curr_d = 0
+        for d in top_ord:
+            for node in d:
+                n = node.detach().numpy()                
+                if not(feats[ex_idx][n][0] == 0):                 
+                    overall_depths_all[g_d][curr_d] += 1
+
+                    if (labels[ex_idx][n] == 1 and not(feats[ex_idx][n][1] == 0)):
+                        overall_depths_sp[g_d][curr_d] += 1
+            curr_d += 1         
+
+    # print per graph sz
+    #for g_d in overall_depths_sp.keys():
+    #    print("\n**graphs w/ depth " + str(g_d))
+
+    #    for indiv_d in overall_depths_sp[g_d].keys():
+    #        if (overall_depths_all[g_d][indiv_d] == 0):
+    #            continue 
+    #        print("\t" + str(indiv_d) + ": " + str(float( overall_depths_sp[g_d][indiv_d] ) / overall_depths_all[g_d][indiv_d]) + \
+    #              " -total: " + str(overall_depths_all[g_d][indiv_d]))           
+
+    # print for alll graphs 
+    comb_depths_sp = {}
+    comb_depths_all = {}
+
+    for i in range(40): 
+        comb_depths_sp[i] = 0
+        comb_depths_all[i] = 0
+
+    for g_d in overall_depths_sp.keys():
+        for indiv_d in overall_depths_sp[g_d].keys():
+            comb_depths_sp[indiv_d] += overall_depths_sp[g_d][indiv_d] 
+            comb_depths_all[indiv_d] += overall_depths_all[g_d][indiv_d] 
+
+    total_nodes = 0
+    for k in comb_depths_all.keys():
+        total_nodes += comb_depths_all[k]
+
+    print("depth,prop_sp,prop_all")
+    for depth in comb_depths_sp.keys():
+        if (comb_depths_all[depth] == 0):
+            continue
+        print(str(depth) + "," + str(float(comb_depths_sp[depth]) / comb_depths_all[depth]) + ", " + str(float(comb_depths_all[depth])/total_nodes))
+ 
+
+
 #
 if __name__ == '__main__':
     assert(len(sys.argv) > 1), "missing path to ds"
@@ -193,13 +271,15 @@ if __name__ == '__main__':
         g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs = load_nootcfeat_ds(sys.argv[1])
     else: 
         g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs = load_predfpo_ds(sys.argv[1])
+
     
-    output_targ_stats(labels)
+    #output_targ_stats(labels)
+    #analyze_depth(g_edges, g_idxs, feats, unary_masks, labels, shuff_idxs)
+    #analyze_depth(g_edges, g_idxs, feats, unary_masks, labels, shuff_idxs)
 
-    #FIXME FIXME
+
     bid_mpgnn = train_mpgnn(g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
-
-    mpgnn_test_eval(bid_mpgnn,g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs)
+    mpgnn_test_eval(bid_mpgnn,g_edges, feats, labels, unary_masks, g_idxs, shuff_idxs, sys.argv[1])
 
 
 

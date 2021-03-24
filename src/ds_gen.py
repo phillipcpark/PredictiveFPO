@@ -22,7 +22,7 @@ def gen_ds(exec_trace, solution, inputs, sz):
         valid = False
 
         while not(valid):
-            cand = gen_rand_otc(exec_trace)    
+            cand = gen_rand_otc(exec_trace, precisions, p_precisions)    
     
             for i_idx in range(input_sz):
                 result_cand = sim_prog(exec_trace, inputs[i_idx], cand) 
@@ -43,7 +43,7 @@ def gen_ds(exec_trace, solution, inputs, sz):
 
 #
 def emit_ds(path, traces, feats, labels, feats_per_prog):
-    ds_path = path 
+    ds_path = path + '/' + 'ds.csv' 
  
     with open(ds_path, 'w') as f_hand:
         f_writer = csv.writer(f_hand, delimiter=',')
@@ -62,9 +62,20 @@ def emit_ds(path, traces, feats, labels, feats_per_prog):
                                       [labels[prog_idx][otc_idx][insn_idx]])                
                 f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 3)])     
 
+#
+def write_in_sets(path, in_sets):
+    for in_set in range(len(in_sets)):
+        ds_path = path + '/' + 'inputs_'+str(in_set) + '.csv'
+
+        with open(ds_path, 'w') as f_hand:
+            f_writer = csv.writer(f_hand, delimiter=',')
+            for prog_ins in in_sets[in_set]:
+                f_writer.writerow([val for val in prog_ins if not(val==None)])
+        
+                    
 
 #
-def print_for_gviz(prog_g, exec_trace, precs):
+def print_for_gviz(prog_g, exec_trace, precs, annot=None):
     edges = prog_g.edges()
 
     counter = 0
@@ -72,21 +83,14 @@ def print_for_gviz(prog_g, exec_trace, precs):
     for node in netwx.topological_sort(prog_g):    
         node_ids[node] = counter
         counter += 1              
- 
-    for e in edges:
+
+    if not(annot == None):
+        for e in edges:
+            if (annot[e[0]] == True):
+                print("\"" + str(ops_inv[exec_trace[e[0]][1]])+ "_" + str(e[0]) + "\"" + " [style=filled];\n")
+            
+    for e in edges:           
         print("\"" + str(ops_inv[exec_trace[e[0]][1]])+ "_" + str(e[0]) + "\" -> \"" +  str(ops_inv[exec_trace[e[1]][1]]) + "_"+ str(e[1]) + "\";")
-        #if not(exec_trace[node_ids[e[0]]][1] == 0 and not(exec_trace[node_ids[e[1]]][1] == 0)):                 
-        #    print(str(e[0])+"_"+str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
-
-        #elif not(exec_trace[node_ids[e[0]]][1] == 0):
-        #        print(str(e[0]) + "_" + str(precs[node_ids[e[0]]]) + "->" + str(e[1])+ ";")
- 
-        #elif not(exec_trace[node_ids[e[1]]][1] == 0):
-        #        print(str(e[0]) + "->" + str(e[1])+ "_" + str(precs[node_ids[e[1]]]) + ";")
-
-        #else: 
-        #    print(str(e[0]) + "->" + str(e[1])+ ";")
-
 
                       
 #    
@@ -101,7 +105,7 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 1000
+    prog_count = 1250
 
     exec_traces = []
     solutions   = []
@@ -120,7 +124,7 @@ if __name__ == '__main__':
             exec_trace, prog_g  = gen_prog(samplers, soft_constraints)        
             sol_otc, samp_inputs = search_opt_otc(exec_trace, samplers)
 
-        if not(np.sum(sol_otc) == 0):
+        if (np.sum(sol_otc) == 0):
             print("\t**sol otc was, SOMEHOW, all-sp")    
             continue
 
@@ -136,7 +140,7 @@ if __name__ == '__main__':
     print("\n** " + str(prog_count) + " done in " + str(end_t - start_t)) 
                     
     #number of a priori input OTCs are generated
-    feats_per_prog = 50 
+    feats_per_prog = 1#50 
     all_feats = []
     all_labels = [] 
 
@@ -148,9 +152,8 @@ if __name__ == '__main__':
         all_labels.append(labels)
 
     path = sys.argv[1]
-    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)
-
-
+    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)   
+    write_in_sets(path, inputs)
 
 
 

@@ -1,12 +1,11 @@
 from copy import deepcopy
 
-EXP_NAME = 'DELETE_ME' #'sptarg_thresh1e-7_ep128_mpuntie8_depthpartsz7_res2'
-MOD_PATH = 'models/sptarg_thresh1e-7_ep128_mpuntie8_depthpartsz7_res2/_ep126_tr0.03_val0.03'  #_ep80_tr0.04_val0.04'
-TST_IDXS_PATH = 'models/sptarg_thresh1e-7_ep128_mpuntie8_depthpartsz7_res2/tst_idxs'
-
-USE_GPU = False
-
-MAX_TST_PROGS = 128 #128 #512
+EXP_NAME = None #'corrected_ep1024' 
+MOD_PATH = 'corrected_ep1024/_ep1022_tr0.09_val1.06'
+TST_IDXS_PATH = 'corrected_ep1024/tst_idxs'
+ 
+USE_GPU       = False
+MAX_TST_PROGS = 0 #250 
 
 #doesn't use input OTCs and predicts precision directly
 # don't use with COARSE_TUNE or SP_TARGET 
@@ -21,11 +20,11 @@ SP_TARGET = True
 ###############
 #training specs 
 ###############
-BAT_SZ     = 128
-EPOCHS     = 0 #128 
+BAT_SZ     = 133
+EPOCHS     = 0
 H_DIM      = 32 #64
-TR_DS_PROP = 0.01 #0.87
-VAL_DS_PROP = 0.02
+TR_DS_PROP = 0.78
+VAL_DS_PROP = 0.01
 
 L_RATE     = 0.1
 USE_CL_BAL = True
@@ -43,13 +42,13 @@ MP_STEPS      = 8
 TIE_MP_PARAMS = False
 
 USE_PRED_THRESH = True
-PRED_THRESH   = 0.71 #0.68
+PRED_THRESH   = 0.65 #0.68
 
 input_samp_sz = 10000    
 inputs_mag    = 3
 
 err_thresh      = 0.0000001
-err_accept_prop = 0.999
+err_accept_prop = 0.99 #0.999
 
 CONST_PREC = 64
 

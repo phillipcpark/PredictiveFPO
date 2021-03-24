@@ -2,8 +2,8 @@ from params import *
 from numpy import random as rand
 import numpy as np
 
-precisions = [32, 64, 80] 
-p_precisions = [0.35, 0.55, 0.1]
+#precisions = [32, 64, 80] 
+#p_precisions = [0.35, 0.55, 0.1]
 
 #
 def is_const(opcode):
@@ -21,7 +21,6 @@ def is_unary(opcode):
 def tune_prec(orig, tune_rec):
     rec = None
 
-    #FIXME binary problem tunes to 32
     if (COARSE_TUNE):
         if (tune_rec == 1):
             rec = -2  
@@ -48,8 +47,10 @@ def gen_spec_otc(prog, prec):
     return otc
 
 #
-def gen_rand_otc(prog):
-    otc = [rand.choice(precisions, p=p_precisions) for insn in prog] 
+def gen_rand_otc(prog, precs, p_precs):
+    otc = [rand.choice(precs, p=p_precs) for insn in prog] 
+    #otc = [rand.choice(precisions, p=p_precisions) for insn in prog] 
+
     return otc
 
 #

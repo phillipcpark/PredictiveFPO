@@ -16,24 +16,21 @@ from otc import *
 from prog_sim import *
 from eval_metrics import *
 
+from params import *
+
 from numpy import random as rand
 
 search_steps = 1 #for progressive tuning
-input_samp_sz = 10000    
 otc_samp_sz = 200
-
-inputs_mag = 3 #6
 
 precisions = [32, 64, 80] 
 prec_map ={32:0,
            64:1,
            80:2}
 
-p_precisions = [0.35, 0.55, 0.1] #[0.45, 0.45, 0.1]  #[0.6, 0.3, 0.1]
+p_precisions = [0.15, 0.85, 0.0] #0.1] #[0.35, 0.55, 0.1]
 p_tune_max = 0.5
 p_tune_min = 0.5
-
-err_thresh = 0.0000001 #0.01
 
 is_binary = {'ADD': True,
              'SUB': True,
@@ -47,7 +44,7 @@ soft_constraints = {'max_edges':30, 'max_out_degree':3, 'max_consts':4}
 
 
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
-dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]     
+dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
 dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
@@ -193,6 +190,7 @@ opcodes = {'CONST':0,
            'DIV':4,
            'SIN':5,
            'COS':6 } 
+
 #
 def emit_binary_op(op_id, op, srcs):     
     if not (len(srcs) == 2):
@@ -426,6 +424,8 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
         for otc in cand_otcs: 
             invalid = False     
 
+            errs = []
+
             for input_idx in range(len(inputs)): 
                 result_cand = sim_prog(exec_trace, inputs[input_idx], otc) 
 
@@ -434,12 +434,27 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
                     break
                 error = abs(relative_error(result_cand, shad_results[input_idx]))
 
-                if error > err_thresh:                                    
-                    invalid = True
-                    break
+                errs.append(error)
+
+                #if error > err_thresh:                                    
+                #    invalid = True
+                #    break
 
             if (invalid):
-                continue  
+                continue
+
+            lt_thresh = 0
+            count = 0
+            for err in errs:
+                if (err < err_thresh):
+                    lt_thresh += 1
+                count += 1
+
+            # FIXME FIXME relaxed acceptance criteria
+            if ((float(lt_thresh) / count) < err_accept_prop):
+                continue
+
+            #print("\n\t\t**acceptance rate: " + str(float(count) / len(errs)))
 
             # valid, is optimal otc
             optimal_otc = otc
@@ -465,8 +480,8 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
 
 #
 def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
-    print("\tgen rand cand otcs")
-    cand_otcs   = [ gen_rand_otc(exec_trace) for samp in range(samp_sz) ] 
+    print("\tgen rand cand otcs for err thresh " + str(err_thresh))
+    cand_otcs   = [ gen_rand_otc(exec_trace, precisions, p_precisions) for samp in range(samp_sz) ] 
      
 
     print("\tsorting cand otcs by scores")
@@ -485,12 +500,14 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
   
     optimal_otc = None
     for otc_idx in range(len(cand_otcs)): 
-        if (otc_idx % 50 == 0):
+        if (otc_idx % 2 == 0):
             print("\tsearching otc " + str(otc_idx))
 
         otc = cand_otcs[otc_idx]
 
         invalid = False     
+        errs = []
+
         for input_idx in range(len(inputs)): 
             result_cand = sim_prog(exec_trace, inputs[input_idx], otc) 
 
@@ -499,11 +516,29 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
                 break
             error = relative_error(result_cand, shad_results[input_idx])
 
-            if error > err_thresh:                 
-                invalid = True
-                break
+            errs.append(error)
+
+            #if error > err_thresh:                 
+            #    invalid = True
+            #    break
+ 
         if (invalid):
-            continue  
+            continue
+
+        lt_thresh = 0
+        count = 0        
+       
+        for err in errs:
+            if (err < err_thresh):
+                lt_thresh += 1
+            count += 1 
+
+        # FIXME FIXME relaxed acceptance criteria
+        if (float((lt_thresh) / count) < err_accept_prop):
+            continue   
+
+        print("\ninit sol: " + str(otc))
+        print("\n\t\t**acceptance rate: " + str(float(lt_thresh) / count))
 
         # valid, is optimal otc
         optimal_otc = otc
@@ -513,9 +548,6 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
     # keep tuning down until no new solution
     #
     if not (optimal_otc is None):
-        print("\tinitial sol")
-        print(np.sum(optimal_otc))
-
         last_sol = optimal_otc                  
         cands   = expand_otcs_down([last_sol], 1.0)    
         phase   = 0 
@@ -530,18 +562,38 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
                 cand = cands[cand_idx]
                 viable = True 
 
+                errs = []
                 for input_idx in range(len(inputs)):               
                     result_cand = sim_prog(exec_trace, inputs[input_idx], cand) 
     
                     if result_cand == None:
                         viable = False
                         break
+ 
+                    error = relative_error(result_cand, shad_results[input_idx])
+                    errs.append(error)
 
-                    error = abs(relative_error(result_cand, shad_results[input_idx]))
+                    #if error > err_thresh:                 
+                    #    viable = False
+                    #    break
 
-                    if error > err_thresh:                 
-                        viable = False
-                        break
+                if not(viable):
+                    continue
+
+                lt_thresh = 0
+                count = 0
+                for err in errs:
+                    if (err < err_thresh):
+                        lt_thresh += 1
+                    count += 1 
+
+                # FIXME FIXME relaxing acceptance criteria
+                if ((float(lt_thresh) / count) >= err_accept_prop):
+                    print("\taccept rate was " + str(float(lt_thresh)/count) + " for sol starting next phase: " + str(cand))
+                    viable = True
+                else:
+                    viable = False
+
                 if (viable):                     
                     if are_same_otcs(curr_sol, cand):
                         break
@@ -579,7 +631,7 @@ def hybrid_strat(exec_trace, inputs, max_prec_otc):
 #
 def search_opt_otc(exec_trace, samplers):     
     # generate inputs/precision and perform search 
-    #inputs = gen_inputs(exec_trace, input_samp_sz, inputs_bound_l, inputs_bound_h)
+    #inputs = gen_inputs(exec_trace, input_samp_sz, -1.0*(10**inputs_mag), 1.0*10**inputs_mag)
     inputs = gen_stratified_inputs(exec_trace, input_samp_sz, inputs_mag)
 
     max_prec_otc = gen_spec_otc(exec_trace,precisions[-1])
