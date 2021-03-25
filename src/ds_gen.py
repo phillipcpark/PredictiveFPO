@@ -105,11 +105,12 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 1250
+    prog_count = 1 #1250
 
     exec_traces = []
     solutions   = []
     inputs      = []
+    write_results = []
 
     for i in range(prog_count):
         print("\n******\n**prog\n****** " + str(i))
@@ -119,14 +120,17 @@ if __name__ == '__main__':
         exec_trace = None
         sol_otc = None
         samp_inputs  = None
+        write_result = None
 
         while (sol_otc is None):
-            exec_trace, prog_g  = gen_prog(samplers, soft_constraints)        
-            sol_otc, samp_inputs = search_opt_otc(exec_trace, samplers)
+            exec_trace, prog_g, write_result = gen_prog(samplers, soft_constraints)        
+            sol_otc, samp_inputs = search_opt_otc(exec_trace, write_result, samplers)
 
         if (np.sum(sol_otc) == 0):
             print("\t**sol otc was, SOMEHOW, all-sp")    
             continue
+
+        write_results.append(write_result)
 
         #FIXME
         #print_for_gviz(prog_g, exec_trace, sol_otc)

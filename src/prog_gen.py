@@ -336,8 +336,28 @@ def gen_prog(samplers, soft_constraints):
                     conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
                 
     exec_list = gen_exec_list(prog_g)
-          
-    return exec_list, prog_g
+
+    #flag operations that must be written to memory (i.e. >1 children)
+    counts = [0 for i in range(len(exec_list))]
+    for insn in exec_list:
+        if not(insn[2] == None):
+            counts[insn[2]] += 1
+        if not(insn[3] == None):
+            counts[insn[3]] += 1         
+
+    write_result = []
+    for nidx in range(len(counts)):
+        if (counts[nidx] > 1):
+            write_result.append(True)         
+        else:
+            write_result.append(False)
+
+    #print("") 
+    #for insn_idx in range(len(exec_list)):
+    #    print(str(exec_list[insn_idx]) + ", " + str(write_result[insn_idx])) 
+    #sys.exit(0)
+ 
+    return exec_list, prog_g, write_result
 
           
 # 
@@ -413,7 +433,24 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
     for result in shad_results:
         if (result == None):
             print("\t****shadow caused FP exception; no solution for program")
+            return None
+
+    dp_results = [sim_prog(exec_trace, _input, gen_spec_otc(exec_trace, precisions[1])) for _input in inputs]
+
+    dp_lt_thresh = 0
+    in_sz = len(dp_results)
+    for result_idx in range(in_sz):
+        if (result == None):
+            print("\t****init DP sol caused FP exception; no solution for program")
             return False
+
+        if (abs((dp_results[result_idx] - shad_results[result_idx])/shad_results[result_idx]) < err_thresh):
+            dp_lt_thresh +=1
+
+    if (float(dp_lt_thresh)/in_sz < err_accept_prop):
+        print("\t****init DP sol was not accepted; no solution for program")
+        return False
+
 
     optimal_otc= None
     best_err   = 1.0
@@ -479,7 +516,7 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
 
 
 #
-def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
+def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
     print("\tgen rand cand otcs for err thresh " + str(err_thresh))
     cand_otcs   = [ gen_rand_otc(exec_trace, precisions, p_precisions) for samp in range(samp_sz) ] 
      
@@ -615,21 +652,21 @@ def rand_subset_strat(exec_trace, inputs, max_prec_otc, samp_sz):
     return optimal_otc
 
 #
-def hybrid_strat(exec_trace, inputs, max_prec_otc):
+def hybrid_strat(exec_trace, write_result, inputs, max_prec_otc):
 
     # check if trivial solution
     sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, 1)
 
-    if not(sol is None):      
+    if not(sol == None):      
         print("\t**solution was trivial, skipping program")
         return None 
 
-    sol = rand_subset_strat(exec_trace, inputs, max_prec_otc, otc_samp_sz)
+    sol = rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, otc_samp_sz)
     
     return sol
 
 #
-def search_opt_otc(exec_trace, samplers):     
+def search_opt_otc(exec_trace, write_result, samplers):     
     # generate inputs/precision and perform search 
     #inputs = gen_inputs(exec_trace, input_samp_sz, -1.0*(10**inputs_mag), 1.0*10**inputs_mag)
     inputs = gen_stratified_inputs(exec_trace, input_samp_sz, inputs_mag)
@@ -638,7 +675,7 @@ def search_opt_otc(exec_trace, samplers):
 
     #sol = rand_subset_strat(exec_trace, inputs, max_prec_otc, otc_samp_sz)
     #sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, search_steps)
-    sol = hybrid_strat(exec_trace, inputs, max_prec_otc)
+    sol = hybrid_strat(exec_trace, write_result, inputs, max_prec_otc)
 
     if sol is None:
         print("\t\t**failed to find sol")
