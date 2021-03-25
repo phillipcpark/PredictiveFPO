@@ -39,15 +39,15 @@ is_binary = {'ADD': True,
              'SIN': False,
              'COS': False}
 
-soft_constraints = {'max_edges':30, 'max_out_degree':3, 'max_consts':4}
+soft_constraints = {'max_edges':30, 'max_out_degree':4, 'max_consts':5}
 #soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
 
 
 op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
-dir_p_ops   = [10.0, 10.0, 10.0, 10.0, 1.0, 1.0]
+dir_p_ops   = [4.0, 4.0, 4.0, 4.0, 1.5, 1.5] #[10.0, 10.0, 10.0, 10.0, 1.0, 1.0]
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
-dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
+dir_p_edges = [4.0, 2.0, 0.5, 2.0] #[10.0, 1.0, 0.1, 0.1] 
 
 #dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
 #dir_p_edges = [12.0, 6.0, 1.0, 0.5] 
@@ -347,7 +347,7 @@ def gen_prog(samplers, soft_constraints):
 
     write_result = []
     for nidx in range(len(counts)):
-        if (counts[nidx] > 1):
+        if (counts[nidx] > 1 or is_func(exec_list[nidx][1])):
             write_result.append(True)         
         else:
             write_result.append(False)
@@ -407,9 +407,8 @@ def expand_otcs_down(otcs, exec_list, write_result, gen_rate):
     for otc in otcs:
         tuneable_idxs = []
 
-        #FIXME FIXME FIXME need to account library calls also!!
         for prec_idx in range(len(otc)):
-            if not(otc[prec_idx] == precisions[0]) and (write_result[prec_idx] or exec_list[prec_idx][1]==0):  
+            if not(otc[prec_idx] == precisions[0]) and (write_result[prec_idx] or exec_list[prec_idx][1]==0 or is_func(exec_list[prec_idx][1])):  
                 tuneable_idxs.append(prec_idx)
 
         print("\n" + str(tuneable_idxs) + "\n")

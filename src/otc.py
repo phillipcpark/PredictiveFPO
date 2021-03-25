@@ -18,6 +18,15 @@ def is_unary(opcode):
     return False
 
 #
+def is_func(opcode):
+    if (opcode >= ops['SIN']):
+        return True
+    else:
+        return False 
+
+
+
+#
 def tune_prec(orig, tune_rec):
     rec = None
 

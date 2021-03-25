@@ -1,5 +1,5 @@
 from prog_gen import *
-
+from otc import *
 
 # generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
 def gen_ds(exec_trace, write_result, solution, inputs, sz):
@@ -76,22 +76,23 @@ def write_in_sets(path, in_sets):
                     
 
 #
-def print_for_gviz(prog_g, exec_trace, precs, annot=None):
-    edges = prog_g.edges()
+def print_for_gviz(exec_trace, write_result, precs):
 
-    counter = 0
-    node_ids = {}
-    for node in netwx.topological_sort(prog_g):    
-        node_ids[node] = counter
-        counter += 1              
+    print("")
+    for insn in exec_trace:
+        print(insn)
+    print("")
 
-    if not(annot == None):
-        for e in edges:
-            if (annot[e[0]] == True):
-                print("\"" + str(ops_inv[exec_trace[e[0]][1]])+ "_" + str(e[0]) + "\"" + " [style=filled];\n")
-            
-    for e in edges:           
-        print("\"" + str(ops_inv[exec_trace[e[0]][1]])+ "_" + str(e[0]) + "\" -> \"" +  str(ops_inv[exec_trace[e[1]][1]]) + "_"+ str(e[1]) + "\";")
+    for insn in exec_trace:
+        if (write_result[insn[0]] or insn[1]==0 or is_func(insn[1])):
+            if (precs[insn[0]] == 32):
+                print("\"" + str(insn[0]) + "\"" + " [style=filled,color=blue];\n")
+            else:
+                print("\"" + str(insn[0]) + "\"" + " [style=filled];\n")          
+        if not(insn[2] == None):
+            print("\"" + str(insn[2])+ "\" -> \"" + str(insn[0]) + "\";")
+        if not(insn[3] == None):
+            print("\"" + str(insn[3])+ "\" -> \"" + str(insn[0]) + "\";")
 
                       
 #    
@@ -106,7 +107,7 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 1 #1250
+    prog_count = 10 #1250
 
     exec_traces = []
     solutions   = []
@@ -118,6 +119,7 @@ if __name__ == '__main__':
         sol_otc = None
         candidates = None
 
+        prog_g = None
         exec_trace = None
         sol_otc = None
         samp_inputs  = None
@@ -134,7 +136,7 @@ if __name__ == '__main__':
         write_results.append(write_result)
 
         #FIXME
-        #print_for_gviz(prog_g, exec_trace, sol_otc)
+        print_for_gviz(exec_trace, write_result, sol_otc)
 
         exec_traces.append(exec_trace)
         solutions.append(sol_otc)
