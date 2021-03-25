@@ -54,8 +54,16 @@ def gen_rand_otc(prog, precs, p_precs):
     return otc
 
 #
-def sort_otcs_by_score(otcs):
-    scores = [np.sum(otc) for otc in otcs]
+def sort_otcs_by_score(otcs, exec_trace, write_result):
+    scores = []
+
+    for otc in otcs:
+        score = 0
+        for nidx in range(len(exec_trace)):
+            if (exec_trace[nidx][1]==0 or write_result[nidx]):
+                score += otc[nidx]
+        scores.append(score) 
+
     sort_idxs = np.argsort(scores)
     sorted_otcs = [otcs[idx] for idx in sort_idxs]
     

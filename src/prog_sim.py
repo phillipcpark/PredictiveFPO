@@ -1,6 +1,8 @@
 from fp_funcs import * 
 from params import *
 
+from otc import *
+
 # 
 def sim_prog(insns, write_result, inputs, otc):
 
@@ -78,7 +80,14 @@ def sim_prog(insns, write_result, inputs, otc):
 #    else:
 #        write_result.append(False) 
 #
+#otc1 = [32,32,32,32,64,64, -1, -1, -1, -1]
+#otc2 = [64,64,64,32,32,32, -1, -1, -1, -1]
 #
+#_sorted = sort_otcs_by_score([otc1, otc2], exec_list, write_result)
+#print(_sorted)
+
+
+
 #result_qp = sim_prog(exec_list, write_result, [9483094039493.23, 0.1394083493821723, 0.4833940823423], [80 for i in range(len(exec_list))]) 
 #result = sim_prog(exec_list, write_result, [9483094039493.23, 0.1394083493821723, 0.4833940823423], [32,64,64,32,32,64, 80, 80, 80, 80])
 #mp.prec=64

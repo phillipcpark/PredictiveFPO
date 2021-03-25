@@ -401,15 +401,19 @@ def expand_otcs_up(otcs, gen_rate):
  
 
 #
-def expand_otcs_down(otcs, gen_rate):
+def expand_otcs_down(otcs, exec_list, write_result, gen_rate):
     exp_otcs = []
 
     for otc in otcs:
         tuneable_idxs = []
 
+        #FIXME FIXME FIXME need to account library calls also!!
         for prec_idx in range(len(otc)):
-            if not (otc[prec_idx] == precisions[0]):  
+            if not(otc[prec_idx] == precisions[0]) and (write_result[prec_idx] or exec_list[prec_idx][1]==0):  
                 tuneable_idxs.append(prec_idx)
+
+        print("\n" + str(tuneable_idxs) + "\n")
+
          
         for _idx in tuneable_idxs:
             if rand.choice([True, False], p=[gen_rate, 1.0-gen_rate]):
@@ -424,18 +428,18 @@ def expand_otcs_down(otcs, gen_rate):
 
 
 #
-def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
+def progress_tuneup_strat(exec_trace, write_result, inputs, max_prec_otc, steps):
 
     # start with all lowest precision
     cand_otcs   = [ gen_spec_otc(exec_trace,precisions[0]) ] 
 
-    shad_results = [sim_prog(exec_trace, _input, max_prec_otc) for _input in inputs]
+    shad_results = [sim_prog(exec_trace, write_result, _input, max_prec_otc) for _input in inputs]
     for result in shad_results:
         if (result == None):
             print("\t****shadow caused FP exception; no solution for program")
-            return None
+            return False
 
-    dp_results = [sim_prog(exec_trace, _input, gen_spec_otc(exec_trace, precisions[1])) for _input in inputs]
+    dp_results = [sim_prog(exec_trace, write_result, _input, gen_spec_otc(exec_trace, precisions[1])) for _input in inputs]
 
     dp_lt_thresh = 0
     in_sz = len(dp_results)
@@ -451,7 +455,6 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
         print("\t****init DP sol was not accepted; no solution for program")
         return False
 
-
     optimal_otc= None
     best_err   = 1.0
 
@@ -464,7 +467,7 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
             errs = []
 
             for input_idx in range(len(inputs)): 
-                result_cand = sim_prog(exec_trace, inputs[input_idx], otc) 
+                result_cand = sim_prog(exec_trace, write_result, inputs[input_idx], otc) 
 
                 if result_cand == None:
                     invalid = True
@@ -515,6 +518,9 @@ def progress_tuneup_strat(exec_trace, inputs, max_prec_otc, steps):
 
 
 
+
+
+
 #
 def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
     print("\tgen rand cand otcs for err thresh " + str(err_thresh))
@@ -522,11 +528,11 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
      
 
     print("\tsorting cand otcs by scores")
-    cand_otcs   = sort_otcs_by_score(cand_otcs)
+    cand_otcs   = sort_otcs_by_score(cand_otcs, exec_trace, write_result)
 
     print("\tgen shadow results")
  
-    shad_results = [sim_prog(exec_trace, _input, max_prec_otc) for _input in inputs]
+    shad_results = [sim_prog(exec_trace, write_result, _input, max_prec_otc) for _input in inputs]
 
     for result in shad_results:
         if (result == None):
@@ -546,7 +552,7 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
         errs = []
 
         for input_idx in range(len(inputs)): 
-            result_cand = sim_prog(exec_trace, inputs[input_idx], otc) 
+            result_cand = sim_prog(exec_trace, write_result, inputs[input_idx], otc) 
 
             if result_cand == None:
                 invalid = True
@@ -586,13 +592,13 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
     #
     if not (optimal_otc is None):
         last_sol = optimal_otc                  
-        cands   = expand_otcs_down([last_sol], 1.0)    
+        cands   = expand_otcs_down([last_sol], exec_trace, write_result, 1.0)    
         phase   = 0 
 
         while(len(cands) > 0): 
             curr_sol = None    
 
-            cands = sort_otcs_by_score(cands) 
+            cands = sort_otcs_by_score(cands, exec_trace, write_result) 
             print("\teval " + str(len(cands)) + " improved solutions")
              
             for cand_idx in range(len(cands)):
@@ -601,7 +607,7 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
 
                 errs = []
                 for input_idx in range(len(inputs)):               
-                    result_cand = sim_prog(exec_trace, inputs[input_idx], cand) 
+                    result_cand = sim_prog(exec_trace, write_result, inputs[input_idx], cand) 
     
                     if result_cand == None:
                         viable = False
@@ -636,7 +642,7 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
                         break
                  
                     curr_sol  = copy.deepcopy(cand)
-                    cands = expand_otcs_down([curr_sol], 1.0 - (1.0 / (1 + math.e**(phase+1))))
+                    cands = expand_otcs_down([curr_sol], exec_trace, write_result, 1.0 - (1.0 / (1 + math.e**(phase+1))))
                     break                     
 
             if (curr_sol is None):
@@ -655,10 +661,10 @@ def rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, samp_sz):
 def hybrid_strat(exec_trace, write_result, inputs, max_prec_otc):
 
     # check if trivial solution
-    sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, 1)
+    sol = progress_tuneup_strat(exec_trace, write_result, inputs, max_prec_otc, 1)
 
     if not(sol == None):      
-        print("\t**solution was trivial, skipping program")
+        print("\t**solution was trivial or didn't exist, skipping program")
         return None 
 
     sol = rand_subset_strat(exec_trace, write_result, inputs, max_prec_otc, otc_samp_sz)
@@ -677,7 +683,7 @@ def search_opt_otc(exec_trace, write_result, samplers):
     #sol = progress_tuneup_strat(exec_trace, inputs, max_prec_otc, search_steps)
     sol = hybrid_strat(exec_trace, write_result, inputs, max_prec_otc)
 
-    if sol is None:
+    if (sol is None):
         print("\t\t**failed to find sol")
         return None, None
 

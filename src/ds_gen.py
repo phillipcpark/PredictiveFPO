@@ -2,7 +2,7 @@ from prog_gen import *
 
 
 # generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
-def gen_ds(exec_trace, solution, inputs, sz):
+def gen_ds(exec_trace, write_result, solution, inputs, sz):
     feats  = []
     labels = []
             
@@ -10,7 +10,7 @@ def gen_ds(exec_trace, solution, inputs, sz):
     shad_results = []
 
     for ins in inputs:
-        shad_results.append(sim_prog(exec_trace, ins, gt_otc)) 
+        shad_results.append(sim_prog(exec_trace, write_result, ins, gt_otc)) 
 
     input_sz = len(inputs)        
 
@@ -22,10 +22,11 @@ def gen_ds(exec_trace, solution, inputs, sz):
         valid = False
 
         while not(valid):
-            cand = gen_rand_otc(exec_trace, precisions, p_precisions)    
-    
+            #cand = gen_rand_otc(exec_trace, precisions, p_precisions)    
+            cand = gen_spec_otc(exec_trace, precisions[1])   
+ 
             for i_idx in range(input_sz):
-                result_cand = sim_prog(exec_trace, inputs[i_idx], cand) 
+                result_cand = sim_prog(exec_trace, write_result, inputs[i_idx], cand) 
     
                 if result_cand == None:
                     break
@@ -151,7 +152,7 @@ if __name__ == '__main__':
     for prog_idx in range(len(exec_traces)):    
         print("gen feats for prog " + str(prog_idx))
 
-        feats, labels = gen_ds(exec_traces[prog_idx], solutions[prog_idx], inputs[prog_idx], feats_per_prog) 
+        feats, labels = gen_ds(exec_traces[prog_idx], write_results[prog_idx], solutions[prog_idx], inputs[prog_idx], feats_per_prog) 
         all_feats.append(feats)
         all_labels.append(labels)
 
