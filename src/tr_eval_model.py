@@ -98,7 +98,7 @@ def get_class_weights(labels):
     total = 0
 
     for k in counts.keys():
-        if not (k == 6):
+        if not (k == IGNORE_CLASS):
             total += counts[k]        
 
     for i in range(CLASSES):

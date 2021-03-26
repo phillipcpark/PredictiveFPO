@@ -1,5 +1,6 @@
 from prog_gen import *
 from otc import *
+from random import choice
 
 # generates sz number of input-output pairs from random a priori OTCs and tuning relative to solution   
 def gen_ds(exec_trace, write_result, solution, inputs, sz):
@@ -43,7 +44,7 @@ def gen_ds(exec_trace, write_result, solution, inputs, sz):
 
 
 #
-def emit_ds(path, traces, feats, labels, feats_per_prog):
+def emit_ds(path, traces, feats, labels, feats_per_prog, offset=0):
     ds_path = path + '/' + 'ds.csv' 
  
     with open(ds_path, 'w') as f_hand:
@@ -59,7 +60,7 @@ def emit_ds(path, traces, feats, labels, feats_per_prog):
 
             for otc_idx in range(feats_per_prog):
                 for insn_idx in range(trace_len):                                       
-                    f_writer.writerow([prog_idx] + traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + \
+                    f_writer.writerow([prog_idx+offset] + traces[prog_idx][insn_idx] + [feats[prog_idx][otc_idx][insn_idx]] + \
                                       [labels[prog_idx][otc_idx][insn_idx]])                
                 f_writer.writerow([None for attrs in range(len(traces[prog_idx][0]) + 3)])     
 
@@ -84,7 +85,13 @@ def print_for_gviz(exec_trace, write_result, precs):
     print("")
 
     for insn in exec_trace:
-        if (write_result[insn[0]] or insn[1]==0 or is_func(insn[1])):
+        if is_func(insn[1]):
+            if (precs[insn[0]] == 32):
+                print("\"" + str(insn[0]) + "\"" + " [style=filled,color=green];\n")
+            else:
+                print("\"" + str(insn[0]) + "\"" + " [style=red];\n")          
+
+        elif (write_result[insn[0]] or insn[1]==0):
             if (precs[insn[0]] == 32):
                 print("\"" + str(insn[0]) + "\"" + " [style=filled,color=blue];\n")
             else:
@@ -107,7 +114,7 @@ if __name__ == '__main__':
     samplers = {'edge':samp_edge, 'op':samp_op, 'const': const_gen}
 
     start_t = time.time()
-    prog_count = 10 #1250
+    prog_count = 1024 #1250
 
     exec_traces = []
     solutions   = []
@@ -125,8 +132,20 @@ if __name__ == '__main__':
         samp_inputs  = None
         write_result = None
 
-        while (sol_otc is None):
+        while (sol_otc is None):          
+            soft_constraints['max_edges']      = choice([25,35,45]) 
+            soft_constraints['max_out_degree'] = choice([4,5,6])             
+            soft_constraints['max_consts']     = choice([3,4,5,6])           
+            print("\ngen graph with constraints " + str(soft_constraints))
+
+ 
             exec_trace, prog_g, write_result = gen_prog(samplers, soft_constraints)        
+
+            #case where graph cant be constructed due to insufficient parentless candidates
+            if (exec_trace is None):
+                print("\n**graph construction failed because all operations had operands, before graph completion\n")
+                continue
+
             sol_otc, samp_inputs = search_opt_otc(exec_trace, write_result, samplers)
 
         if (np.sum(sol_otc) == 0):
@@ -135,7 +154,7 @@ if __name__ == '__main__':
 
         write_results.append(write_result)
 
-        #FIXME
+        #FIXME         
         print_for_gviz(exec_trace, write_result, sol_otc)
 
         exec_traces.append(exec_trace)
@@ -159,7 +178,7 @@ if __name__ == '__main__':
         all_labels.append(labels)
 
     path = sys.argv[1]
-    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog)   
+    emit_ds(path, exec_traces, all_feats, all_labels, feats_per_prog, offset=0)  #FIXME 
     write_in_sets(path, inputs)
 
 

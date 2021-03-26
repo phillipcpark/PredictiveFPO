@@ -68,6 +68,34 @@ def p_cos(src_l, src_r, prec):
     #mp.prec = prec
     return mp.cos(src_l)
 
+# new funcs   #FIXME FIXME FIXME FIXME check domains (inverse funcs returning complex numbers)!!!
+def p_tan(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+    return mp.tan(src_l)
+
+def p_asin(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+    return mp.asin(src_l)
+
+def p_acos(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+    return mp.acos(src_l)
+
+def p_atan(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+    return mp.atan(src_l)
+
+def p_sqrt(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+
+    if (src_l < 0):
+        return None
+    return mp.sqrt(src_l)
+
+def p_pow(src_l, src_r, prec):
+    mp.prec = get_mant_prec(prec)
+    return mp.power(src_l, 2)
+
 
 p_functions = \
 {
@@ -77,7 +105,13 @@ p_functions = \
     3: p_mul,
     4: p_div,
     5: p_sin,
-    6: p_cos
+    6: p_cos,
+    7: p_tan,
+    8: p_asin,
+    9: p_acos,
+   10: p_atan,
+   11: p_sqrt,
+   12: p_pow
 }
 
 opcodes = {'CONST':0,
@@ -86,4 +120,16 @@ opcodes = {'CONST':0,
            'MUL':3,
            'DIV':4,
            'SIN':5,
-           'COS':6 } 
+           'COS':6,
+           'TAN':7,
+           'ASIN':8,
+           'ACOS':9,
+           'ATAN':10,
+           'SQRT':11,
+           'POW':12 } 
+
+
+
+
+
+

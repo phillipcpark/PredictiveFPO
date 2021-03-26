@@ -49,7 +49,7 @@ def sim_prog(insns, write_result, inputs, otc):
                                       'prec': precision} 
             
     # program result is in graph drain
-    return float(results[-1]['val'])
+    return results[-1]['val']
 
 
 #exec_list = [

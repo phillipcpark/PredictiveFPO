@@ -9,6 +9,8 @@ import copy
 import time
 import math
 import csv
+#import matplotlib.pyplot as plt
+
 
 from fp_funcs import *
 from prog_inputs import *
@@ -21,7 +23,7 @@ from params import *
 from numpy import random as rand
 
 search_steps = 1 #for progressive tuning
-otc_samp_sz = 200
+otc_samp_sz = 200 
 
 precisions = [32, 64, 80] 
 prec_map ={32:0,
@@ -37,17 +39,25 @@ is_binary = {'ADD': True,
              'MUL': True,
              'DIV': True,
              'SIN': False,
-             'COS': False}
+             'COS': False,
+             'TAN': False,
+             'ASIN':False,
+             'ACOS':False,
+             'ATAN':False,
+             'SQRT':False,
+             'POW' :False } 
 
 soft_constraints = {'max_edges':30, 'max_out_degree':4, 'max_consts':5}
 #soft_constraints = {'max_edges':25, 'max_out_degree':3, 'max_consts':4}
 
 
-op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS']
-dir_p_ops   = [4.0, 4.0, 4.0, 4.0, 1.5, 1.5] #[10.0, 10.0, 10.0, 10.0, 1.0, 1.0]
+op_types    = ['ADD', 'SUB', 'MUL', 'DIV', 'SIN', 'COS',\
+               'TAN', 'ASIN', 'ACOS', 'ATAN', 'SQRT', 'POW']
+dir_p_ops   = [6.0, 6.0, 6.0, 6.0, 1.0, 1.0, \
+               10**-15, 10**-15, 10**-15, 10**-15, 1.0, 1.0 ]      #[10.0, 10.0, 10.0, 10.0, 1.0, 1.0]
 
 edge_types  = ['op_new', 'op_exist', 'const_new', 'const_exist']
-dir_p_edges = [4.0, 2.0, 0.5, 2.0] #[10.0, 1.0, 0.1, 0.1] 
+dir_p_edges = ['4.0', '2.0', '2.0', '2.0'] #[4.0, 2.0, 0.5, 2.0] #[10.0, 1.0, 0.1, 0.1] 
 
 #dir_p_edges = [10.0, 1.0, 0.1, 0.1] 
 #dir_p_edges = [12.0, 6.0, 1.0, 0.5] 
@@ -159,11 +169,11 @@ def conn_exist_const(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_cons
 
     cands = [cand for cand in nodes_by_attr['consts'] ]
 
-    #FIXME FIXME will loop indefinitely when all consts have max out_degree, and there are 'leftover' ops without full parents
-    #cands = [cand for cand in nodes_by_attr['consts'] \
-    #         if len([child for child in prog_g.successors(cand)]) <= soft_constraints['max_out_degree']]
-   
+
     if (len(cands) < 1):
+        #FIXME FIXME generating src   
+        #if (conn_new_const(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)):    
+        #    return True
         return False
  
     src_id   = rand.choice(cands)
@@ -177,19 +187,14 @@ def conn_exist_const(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_cons
 def conn_src(targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints):
     while (True):
         src_type, _ = samplers['edge']()
-        succ        = gen_src[src_type](targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)      
+
+        max_consts = soft_constraints['max_consts']     
+        if (len(nodes_by_attr['consts']) >= max_consts and src_type=='const_new'):
+            continue
+
+        succ = gen_src[src_type](targ, g_sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)      
         if (succ):
             return   
-
-
-
-opcodes = {'CONST':0,
-           'ADD':1,
-           'SUB':2,
-           'MUL':3,
-           'DIV':4,
-           'SIN':5,
-           'COS':6 } 
 
 #
 def emit_binary_op(op_id, op, srcs):     
@@ -218,7 +223,13 @@ emit_op = {'CONST': emit_const,
            'MUL': emit_binary_op,
            'DIV': emit_binary_op,
            'SIN': emit_unary_op,
-           'COS': emit_unary_op }
+           'COS': emit_unary_op,
+           'TAN': emit_unary_op,
+           'ASIN': emit_unary_op,
+           'ACOS': emit_unary_op,
+           'ATAN': emit_unary_op,
+           'SQRT': emit_unary_op,
+           'POW': emit_unary_op }
 
 gen_src = {'op_new': conn_new_op,
            'op_exist': conn_exist_op,
@@ -284,31 +295,35 @@ def gen_prog(samplers, soft_constraints):
 
         # if prematurely ran out of candidates, generate one; remove const from existing op to create target       
         if (len(cands) < 1):
-            targ_cands = []
+            return None, None, None
+            #targ_cands = []
 
-            # idx-aligned with targ_cands; associated src const
-            src_cands  = []
+            ## idx-aligned with targ_cands; associated src const
+            #src_cands  = []
 
-            for c in nodes_by_attr['consts']:
-                c_children = prog_g.successors(c)
-                for child in c_children:
-                    targ_cands.append(child)
-                    src_cands.append(c)
+            #for c in nodes_by_attr['consts']:
+            #    c_children = prog_g.successors(c)
+            #    for child in c_children:
+            #        targ_cands.append(child)
+            #        src_cands.append(c)
 
-            # choose an existing op, to diconnect from const src
-            targ_idx    = choice(np.arange(len(targ_cands)))                       
-            remove_src  = src_cands[targ_idx]
-            remove_targ = targ_cands[targ_idx]
-            prog_g.remove_edge(remove_src, remove_targ)
+            ## choose an existing op, to diconnect from const src
+            #targ_idx    = choice(np.arange(len(targ_cands)))                       
+            #remove_src  = src_cands[targ_idx]
+            #remove_targ = targ_cands[targ_idx]
+            #prog_g.remove_edge(remove_src, remove_targ)
 
-            #FIXME FIXME need to update all existing const ids which were generated after deleted src                           
-            succs = [child for child in prog_g.successors(remove_src)]
+            #
+            ##FIXME FIXME need to update all existing const ids which were generated after deleted src                           
+            #succs = [child for child in prog_g.successors(remove_src)]
             #if (len(succs) < 1):
+            #    print("\tconstant deleted during graph gen because prematurely ran out of ops needing parents")
+            #    prog_g.remove_node(remove_src)
             #    samplers['const'].delete_const()
 
-            # a candidate target now exists for connecting a new op                       
-            conn_new_op(remove_targ, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)           
-            continue            
+            ## a candidate target now exists for connecting a new op                       
+            #conn_new_op(remove_targ, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)           
+            #continue            
 
         targ_id = choice(cands) 
 
@@ -332,8 +347,16 @@ def gen_prog(samplers, soft_constraints):
                 conn_new_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)               
         else:
             while not(prog_g.nodes[op]['has_parents']):
-                if not(conn_exist_op(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)):                         
-                    conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
+                conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
+                #if not(conn_exist_op(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)):                         
+                #    conn_exist_const(op, sink_id, prog_g, nodes_by_attr, samplers, soft_constraints)
+
+
+    #FIXME FIXME FIXME insufficient operands bug with binary op triggered inside this call
+    #netwx.draw(prog_g)
+    #plt.show()
+    #plt.savefig("0_Graph.png", format="PNG")
+
                 
     exec_list = gen_exec_list(prog_g)
 
@@ -443,11 +466,13 @@ def progress_tuneup_strat(exec_trace, write_result, inputs, max_prec_otc, steps)
     dp_lt_thresh = 0
     in_sz = len(dp_results)
     for result_idx in range(in_sz):
-        if (result == None):
+        if (dp_results[result_idx] == None):
             print("\t****init DP sol caused FP exception; no solution for program")
             return False
 
-        if (abs((dp_results[result_idx] - shad_results[result_idx])/shad_results[result_idx]) < err_thresh):
+        if (shad_results[result_idx] == 0.0 and abs(dp_results[result_idx]-shad_results[result_idx]) < err_thresh):
+            dp_lt_thresh += 1
+        elif (abs((dp_results[result_idx] - shad_results[result_idx])/shad_results[result_idx]) < err_thresh):
             dp_lt_thresh +=1
 
     if (float(dp_lt_thresh)/in_sz < err_accept_prop):

@@ -13,7 +13,7 @@ def is_const(opcode):
 
 #
 def is_unary(opcode):
-    if (opcode == ops['SIN'] or opcode == ops['COS']):
+    if (opcode >= ops['SIN']):
         return True
     return False
 

@@ -1,10 +1,10 @@
 from copy import deepcopy
 
-EXP_NAME = None #'corrected_ep1024' 
-MOD_PATH = 'corrected_ep1024/_ep1022_tr0.09_val1.06'
-TST_IDXS_PATH = 'corrected_ep1024/tst_idxs'
+EXP_NAME = '0_DUMMY_TRAIN' 
+MOD_PATH = None 
+TST_IDXS_PATH = None 
  
-USE_GPU       = False
+USE_GPU       = True
 MAX_TST_PROGS = 0 #250 
 
 #doesn't use input OTCs and predicts precision directly
@@ -20,20 +20,20 @@ SP_TARGET = True
 ###############
 #training specs 
 ###############
-BAT_SZ     = 133
-EPOCHS     = 0
+BAT_SZ     = 250
+EPOCHS     = 512
 H_DIM      = 32 #64
 TR_DS_PROP = 0.78
 VAL_DS_PROP = 0.01
 
 L_RATE     = 0.1
-USE_CL_BAL = True
+USE_CL_BAL = False
 
 CLASSES = 3 if SINGLE_GRAPH_TARG else 5
 if (COARSE_TUNE):
     CLASSES = 2
 
-IGNORE_CLASS = 6
+IGNORE_CLASS = 20
 
 ######################
 #model and ds gen dims
@@ -42,7 +42,7 @@ MP_STEPS      = 8
 TIE_MP_PARAMS = False
 
 USE_PRED_THRESH = True
-PRED_THRESH   = 0.65 #0.68
+PRED_THRESH   = 0.5#0.68
 
 input_samp_sz = 10000    
 inputs_mag    = 3
@@ -62,13 +62,19 @@ GRAPH_DELIM = ['' for i in range(NUM_ATTRIBUTES)]
 precs = {32:0, 64:1, 80:2}
 precs_inv = {0:32, 1:64, 2:80}
 
-ops   = {'CONST':0,\
-         'ADD':1, \
-         'SUB':2, \
-         'MUL':3, \
-         'DIV':4, \
-         'SIN':5, \
-         'COS':6}
+ops   = {'CONST':0,
+         'ADD':1, 
+         'SUB':2, 
+         'MUL':3, 
+         'DIV':4, 
+         'SIN':5, 
+         'COS':6,
+         'TAN':7,
+         'ASIN':8,
+         'ACOS':9,
+         'ATAN':10,
+         'SQRT':11,
+         'POW':12 } 
 
 ops_inv = {0: 'CONST',\
            1: '+', \
@@ -77,8 +83,6 @@ ops_inv = {0: 'CONST',\
            4: '/',\
            5: 'sin',\
            6: 'cos'}
-
-
 
 OP_ENC_DIM = len(ops.keys())*len(precs.keys()) 
 OP_ENC     = {} 

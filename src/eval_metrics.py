@@ -13,10 +13,8 @@ def pred_acc(predicts, labels):
     for p_idx in range(len(predicts)):
         if (labels[p_idx].detach() == IGNORE_CLASS):
             continue  
-
         pred_class = None
 
-        #FIXME thresholded prediction
         if (USE_PRED_THRESH):
             pred_class = 0
             max_prob   = np.amax(predicts.detach().numpy()[p_idx])
@@ -45,6 +43,8 @@ def prec_recall(predicts, labels):
 
     for p_idx in range(len(predicts)):
         gt   = labels[p_idx].detach().numpy() 
+
+        #FIXME FIXME FIXME skip if ignore class!!
 
         pred_class = 0
 
