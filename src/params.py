@@ -1,12 +1,9 @@
 from copy import deepcopy
 
-EXP_NAME      = None
-
-#NOTE 'lg' model uses 3 resnet blocks, whereas regular uses 2...
+EXP_NAME = None
 
 #MOD_PATH    = 'resources/train_32k_LG/_ep504_tr0.57_val0.62' 
 #TST_IDXS_PATH = 'resources/train_32k_LG/tst_idxs'
-
 MOD_PATH      = 'resources/train_32k/_ep174_tr0.56_val0.61'
 TST_IDXS_PATH = 'resources/train_32k/tst_idxs'
  
@@ -90,8 +87,5 @@ for op in ops.keys():
 
         curr_enc.insert(0, 0.0)
         curr_enc.pop()
-
     OP_ENC[ops[op]] = curr_op_encs
-
-
 

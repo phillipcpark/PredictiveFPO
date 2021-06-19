@@ -12,9 +12,6 @@ from otc import *
 
 from prog_sim import *
 
-from flask import Flask, request, current_app
-
-
 
 
 # 

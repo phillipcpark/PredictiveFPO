@@ -1,10 +1,8 @@
 import sys
 import csv
 import random
-from warnings import warn
 from collections import Counter
 import numpy as np
-from json import dumps
 
 from params import *
 from otc import is_const, is_unary
@@ -13,9 +11,7 @@ from bignn import bignn
 
 import torch as th
 
-from flask import Flask, request
 
-app = Flask(__name__)
 
 # 
 def ld_predfpo_ds(path):
@@ -113,23 +109,6 @@ def load_bignn(path=None):
 
 
 #
-@app.route('/predict', methods=['POST'])
-def bignn_predict():         
-
-    prog_g = request.get_json()      
-
-    n_feats = prog_g['node_features']
-    #g_edges = prog_graph['graph_edges']
- 
-    #predicts, _ = gnn(prog_dgl_graph, USE_GPU)
-
-    #sm       = th.nn.Softmax(dim=-1)
-    #predicts = sm(th.sigmoid(predicts))
-
-    return dumps({'node_features': n_feats})
-
-
-#
 #
 #
 if __name__ == '__main__':
@@ -137,12 +116,8 @@ if __name__ == '__main__':
         raise RuntimeError('Expected dataset path as command line argument')
 
     ds    = ld_predfpo_ds(sys.argv[1])   
-
     model = load_bignn(MOD_PATH)
-
-    app.run(host='0.0.0.0', port=5001)
-
-    #test_bignn(ds, sys.argv[1], model)
+    test_bignn(ds, sys.argv[1], model)
 
 
 
