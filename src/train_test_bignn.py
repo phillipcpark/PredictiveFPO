@@ -263,11 +263,14 @@ def test_bignn(ds, base_path, gnn):
 
     # load test_idxs if loading pretrained from disk
     tst_idxs = []
-    if not(MOD_PATH == None):
-        with open(TST_IDXS_PATH, 'r') as idxs_f:        
-            for ex_idx in idxs_f:
-                tst_idxs.append(int(ex_idx)) 
-            idxs_f.close()
+    if not(MOD_PATH == None):      
+        if not (TST_IDXS_PATH is None):
+            with open(TST_IDXS_PATH, 'r') as idxs_f:        
+                for ex_idx in idxs_f:
+                    tst_idxs.append(int(ex_idx)) 
+                idxs_f.close()
+        else:
+            tst_idxs = list(np.arange(len(ds['feats'])))
     else:
         tst_idxs   = [ds['shuff_idxs'][i] for i in range(tr_bat_count*BAT_SZ + valid_sz, len(ds['feats']))]
         tst_writer = open(EXP_NAME + "/tst_idxs", 'w+')    
