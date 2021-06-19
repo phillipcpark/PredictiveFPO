@@ -6,52 +6,34 @@ from collections import Counter
 import numpy as np
 import sys
 
-# evaluate predictions
-def pred_acc(predicts, labels):
-
-    correct = total = 0
-    for p_idx in range(len(predicts)):
-        if (labels[p_idx].detach() == IGNORE_CLASS):
-            continue  
-        pred_class = None
-
-        if (USE_PRED_THRESH):
-            pred_class = 0
-            max_prob   = np.amax(predicts.detach().numpy()[p_idx])
-            if (max_prob >= PRED_THRESH):
-                pred_class = np.argmax(predicts[p_idx].detach().numpy())
-
-        else:
-            pred_class = np.argmax(np.array(predicts[p_idx].detach())) 
-        true_class = np.array(labels[p_idx].detach())
-
-        if (pred_class == true_class):
-            correct += 1
-        total += 1            
-
-    return float(correct) / total
 
 #
 def prec_recall(predicts, labels):
-   
+
     correct   = {}
     incorrect = {}
-    true      = Counter(labels.detach().numpy())
+    true      = {0:0, 1:0} 
+
     for c in range(CLASSES):
         correct[c] = 0
         incorrect[c] = 0
 
     for p_idx in range(len(predicts)):
-        gt   = labels[p_idx].detach().numpy() 
+        gt   = int(labels[p_idx].detach().numpy()) 
 
-        #FIXME FIXME FIXME skip if ignore class!!
+        if (gt == IGNORE_CLASS):
+            continue 
 
-        pred_class = 0
+        true[gt] += 1
+
+        pred_class = None
 
         if (USE_PRED_THRESH):
             max_prob   = np.amax(predicts.detach().numpy()[p_idx])
             if (max_prob >= PRED_THRESH):
                 pred_class = np.argmax(predicts[p_idx].detach().numpy())       
+            else:
+                pred_class = 0
         else:
             pred_class = np.argmax(predicts[p_idx].detach().numpy()) 
 
@@ -59,8 +41,6 @@ def prec_recall(predicts, labels):
             correct[pred_class] += 1
         else:
             incorrect[pred_class] += 1             
-
-    total = len(labels)
 
     prec = {}
     rec  = {}
@@ -87,11 +67,7 @@ def prec_recall(predicts, labels):
 
 # 
 def relative_error(val_num, val_denom):       
-
-    #FIXME FIXME FIXME FIXME using MPMath for higher precision
-    mp.prec = 65
-     
-
+    mp.prec = 65     
     try:
         return mpmath.fabs((val_num - val_denom) / val_denom)
     except:
@@ -115,6 +91,21 @@ def accept_err(errs, or_thresh=None):
         return False, prop_gt_thresh
     return True, prop_gt_thresh
 
+#
+def update_freq_delta(prec_freq_deltas, otc_tuned, otc_orig):    
+    # precision counts
+    total = len(otc_tuned)
+
+    orig_counts = {32:0, 64:0, 80:0}
+    for prec in otc_orig:
+        orig_counts[prec] += 1
+
+    prec_counts = {32:0, 64:0, 80:0} 
+    for prec in otc_tuned:
+        prec_counts[prec] += 1                
+
+    for k in prec_counts.keys():
+        prec_freq_deltas[k].append(float(prec_counts[k])/total - float(orig_counts[k])/total)
 
 
 

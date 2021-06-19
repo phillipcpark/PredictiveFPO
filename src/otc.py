@@ -2,8 +2,6 @@ from params import *
 from numpy import random as rand
 import numpy as np
 
-#precisions = [32, 64, 80] 
-#p_precisions = [0.35, 0.55, 0.1]
 
 #
 def is_const(opcode):
@@ -35,20 +33,10 @@ def tune_prec(orig, tune_rec):
             rec = -2  
         else:
             rec = 0
-    else:
-
-        CLASSES = 5 #FIXME hardcoded for DS loader label gen
-
-        rec = tune_rec - int(CLASSES-1)/int(2)
-
     if rec < 1:
         return max(0, orig+rec)
     else:
         return min(2, orig+rec) 
-
-
-
-
 
 #
 def gen_spec_otc(prog, prec):
@@ -58,8 +46,6 @@ def gen_spec_otc(prog, prec):
 #
 def gen_rand_otc(prog, precs, p_precs):
     otc = [rand.choice(precs, p=p_precs) for insn in prog] 
-    #otc = [rand.choice(precisions, p=p_precisions) for insn in prog] 
-
     return otc
 
 #
@@ -80,8 +66,6 @@ def sort_otcs_by_score(otcs, exec_trace, write_result):
 
 #
 def are_same_otcs(otc1, otc2):
-
-    # FIXME should have cleaner usage, so None is never passed
     if (otc1 is None or otc2 is None):
         return False
    
