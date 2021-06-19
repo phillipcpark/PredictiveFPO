@@ -1,12 +1,21 @@
 import sys
 import csv
 import random
+from warnings import warn
 from collections import Counter
 import numpy as np
+from json import dumps
 
 from params import *
 from otc import is_const, is_unary
-from train_test_bignn import train_bignn, test_bignn
+from train_test_bignn import train_bignn, test_bignn, get_dev
+from bignn import bignn
+
+import torch as th
+
+from flask import Flask, request
+
+app = Flask(__name__)
 
 # 
 def ld_predfpo_ds(path):
@@ -86,6 +95,39 @@ def ld_predfpo_ds(path):
 
     return {'g_edges':g_edges, 'feats':feats, 'labels':labels, 'unary_masks':unary_masks, 'g_idxs':g_idxs, 'shuff_idxs':shuff_idxs, 'exec_lists':exec_lists}
 
+#
+def load_bignn(path=None):
+    global m
+
+    if (MOD_PATH is None):
+        m = bignn(feat_dim, H_DIM, CLASSES)
+        return m
+
+    mod_dev    = get_dev() if USE_GPU else th.device('cpu')
+    state_dict = th.load(MOD_PATH, map_location=mod_dev)
+
+    m = bignn(OP_ENC_DIM, H_DIM, CLASSES)
+    m.to(mod_dev)
+    m.load_hier_state(state_dict)
+    return m 
+
+
+#
+@app.route('/predict', methods=['POST'])
+def bignn_predict():         
+
+    prog_g = request.get_json()      
+
+    n_feats = prog_g['node_features']
+    #g_edges = prog_graph['graph_edges']
+ 
+    #predicts, _ = gnn(prog_dgl_graph, USE_GPU)
+
+    #sm       = th.nn.Softmax(dim=-1)
+    #predicts = sm(th.sigmoid(predicts))
+
+    return dumps({'node_features': n_feats})
+
 
 #
 #
@@ -95,9 +137,12 @@ if __name__ == '__main__':
         raise RuntimeError('Expected dataset path as command line argument')
 
     ds    = ld_predfpo_ds(sys.argv[1])   
-    #bignn = train_bignn(ds)
-    #test_bignn(ds, sys.argv[1], bignn)
-    test_bignn(ds, sys.argv[1])
+
+    model = load_bignn(MOD_PATH)
+
+    app.run(host='0.0.0.0', port=5001)
+
+    #test_bignn(ds, sys.argv[1], model)
 
 
 

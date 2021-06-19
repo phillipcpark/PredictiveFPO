@@ -12,6 +12,10 @@ from otc import *
 
 from prog_sim import *
 
+from flask import Flask, request, current_app
+
+
+
 
 # 
 def create_dgl_graph(edges, feats, is_unary_op, use_gpu):
@@ -142,13 +146,12 @@ def optimizer_to(optim, device):
 #
 #
 #
-def train_bignn(ds):
+def train_bignn(gnn, ds):
     example_count = len(ds['feats'])
     bat_count     = int((example_count * TR_DS_PROP) / BAT_SZ) 
     valid_sz      = int(example_count * VAL_DS_PROP)  
 
     feat_dim  = OP_ENC_DIM
-    gnn       = bignn(feat_dim, H_DIM, CLASSES)
     optimizer = th.optim.Adagrad(gnn.parameters()) 
 
     if (USE_GPU):
@@ -256,22 +259,14 @@ def train_bignn(ds):
 
 
 #
-def test_bignn(ds, base_path, gnn=None):         
+def test_bignn(ds, base_path, gnn):         
     example_count = len(ds['feats'])
     tr_bat_count  = int((example_count * TR_DS_PROP) / BAT_SZ) 
     valid_sz      = int(example_count * VAL_DS_PROP)  
 
-    # load pretrained and test idxs; if model not loaded from file, write new test idxs 
+    # load test_idxs if loading pretrained from disk
     tst_idxs = []
     if not(MOD_PATH == None):
-        mod_dev    = get_dev() if USE_GPU else th.device('cpu')
-        state_dict = th.load(MOD_PATH, map_location=mod_dev)
-
-        gnn = bignn(OP_ENC_DIM, H_DIM, CLASSES)
-        gnn.to(get_dev())
-        gnn.load_hier_state(state_dict)
-        gnn.to('cpu')
-
         with open(TST_IDXS_PATH, 'r') as idxs_f:        
             for ex_idx in idxs_f:
                 tst_idxs.append(int(ex_idx)) 
@@ -387,7 +382,6 @@ def test_bignn(ds, base_path, gnn=None):
             avg_rec[c].append(tst_recs[i][c]) 
     for c in range(CLASSES):            
         print("\t" + str(c) + ": " + str(np.mean(avg_prec[c])) + ", " + str(np.mean(avg_rec[c])))
-
 
 
 
