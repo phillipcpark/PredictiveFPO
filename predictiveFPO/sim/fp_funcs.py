@@ -2,6 +2,7 @@ import mpmath
 from mpmath import mp
 import sys
 
+# number of bits for mantissa, as understood by mpmath 
 def get_mant_prec(prec):
     if (prec == 32):
         return 24
@@ -10,8 +11,8 @@ def get_mant_prec(prec):
     elif (prec == 80):
         return 65
     else:
-        print("\ninvalid precision encountered in DPS getter")
-        sys.exit(1)
+        raise RuntimeError("Invalid precision encountered in DPS getter")
+
 
 # Parameterized scalar floating-point functions
 #   Arguments: 
@@ -33,22 +34,15 @@ def p_const(val, prec):
 
 def p_add(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
-    #mp.prec = prec
-
     return src_l+src_r
     
 def p_sub(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
-    #mp.prec = prec
     return src_l-src_r
-
 
 def p_mul(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
-    #mp.prec = prec
-
     return src_l*src_r
-    #return mp.mpf(mpmath.nstr(mp.mpf(src_l*src_r), n=get_dps(prec)))
 
 def p_div(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
@@ -56,11 +50,11 @@ def p_div(src_l, src_r, prec):
     try:
         return src_l/src_r
     except:
+        # don't reraise because we just need to know whether or not exception occured
         return None
    
 def p_sin(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
-    #mp.prec = prec
     return mp.sin(src_l)
 
 def p_cos(src_l, src_r, prec):
@@ -68,7 +62,7 @@ def p_cos(src_l, src_r, prec):
     #mp.prec = prec
     return mp.cos(src_l)
 
-# new funcs   #FIXME FIXME FIXME FIXME check domains (inverse funcs returning complex numbers)!!!
+#FIXME check domains (inverse funcs returning complex numbers)
 def p_tan(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
     return mp.tan(src_l)
@@ -95,7 +89,6 @@ def p_sqrt(src_l, src_r, prec):
 def p_pow(src_l, src_r, prec):
     mp.prec = get_mant_prec(prec)
     return mp.power(src_l, 2)
-
 
 p_functions = \
 {
@@ -127,9 +120,5 @@ opcodes = {'CONST':0,
            'ATAN':10,
            'SQRT':11,
            'POW':12 } 
-
-
-
-
 
 

@@ -1,20 +1,11 @@
-import sys
 import csv
-import random
-from collections import Counter
-import numpy as np
 
-from params import *
-from otc import is_const, is_unary
-from train_test_bignn import train_bignn, test_bignn, get_dev
-from bignn import bignn
-
-import torch as th
-
-
+from config.params import *
+from common.otc import *
+from random import shuffle
 
 # 
-def ld_predfpo_ds(path):
+def ld_pfpo_ds(path):
     f_hand = open(path + "/ds.csv", 'r')  
     reader = csv.reader(f_hand, delimiter=',')
     next(reader) 
@@ -87,43 +78,6 @@ def ld_predfpo_ds(path):
 
     # shuffle 
     shuff_idxs = np.arange(len(feats)) 
-    random.shuffle(shuff_idxs)
+    shuffle(shuff_idxs)
 
     return {'g_edges':g_edges, 'feats':feats, 'labels':labels, 'unary_masks':unary_masks, 'g_idxs':g_idxs, 'shuff_idxs':shuff_idxs, 'exec_lists':exec_lists}
-
-#
-def load_bignn(path=None):
-    global m
-
-    if (MOD_PATH is None):
-        m = bignn(feat_dim, H_DIM, CLASSES)
-        return m
-
-    mod_dev    = get_dev() if USE_GPU else th.device('cpu')
-    state_dict = th.load(MOD_PATH, map_location=mod_dev)
-
-    m = bignn(OP_ENC_DIM, H_DIM, CLASSES)
-    m.to(mod_dev)
-    m.load_hier_state(state_dict)
-    return m 
-
-
-#
-#
-#
-if __name__ == '__main__':
-    if not(len(sys.argv) == 2):
-        raise RuntimeError('Expected dataset path as command line argument')
-
-    ds    = ld_predfpo_ds(sys.argv[1])   
-    model = load_bignn(MOD_PATH)
-    test_bignn(ds, sys.argv[1], model)
-
-
-
-
-
-
-
-
-

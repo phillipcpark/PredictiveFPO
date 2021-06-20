@@ -1,4 +1,4 @@
-from params import *
+from config.params import *
 
 import mpmath
 from mpmath import mp
@@ -6,10 +6,8 @@ from collections import Counter
 import numpy as np
 import sys
 
-
 #
 def prec_recall(predicts, labels):
-
     correct   = {}
     incorrect = {}
     true      = {0:0, 1:0} 
@@ -23,9 +21,7 @@ def prec_recall(predicts, labels):
 
         if (gt == IGNORE_CLASS):
             continue 
-
-        true[gt] += 1
-
+        true[gt]  += 1
         pred_class = None
 
         if (USE_PRED_THRESH):
@@ -44,9 +40,7 @@ def prec_recall(predicts, labels):
 
     prec = {}
     rec  = {}
-
     for c in range(CLASSES):
-
         if (true[c] == 0):
             if (incorrect[c] == 0):
                 prec[c] = 1.0

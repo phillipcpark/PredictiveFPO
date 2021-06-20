@@ -1,7 +1,11 @@
-from params import *
+from config.params import *
 from numpy import random as rand
 import numpy as np
 
+#
+# helpers for checking, comparing, and assessing operation type configurations,
+# as well as their corresponding operations
+#
 
 #
 def is_const(opcode):
@@ -21,8 +25,6 @@ def is_func(opcode):
         return True
     else:
         return False 
-
-
 
 #
 def tune_prec(orig, tune_rec):
@@ -48,7 +50,7 @@ def gen_rand_otc(prog, precs, p_precs):
     otc = [rand.choice(precs, p=p_precs) for insn in prog] 
     return otc
 
-#
+# scoring is based on number of 32-bit operations
 def sort_otcs_by_score(otcs, exec_trace, write_result):
     scores = []
 
@@ -79,7 +81,7 @@ def are_same_otcs(otc1, otc2):
             return False
     return True 
 
-# gets the # of types between solution and initial
+# of types between solution and initial
 def otc_dist(sol_otc, init_otc, shift=0):
     dists = []
     for insn_idx in range(len(init_otc)):

@@ -1,13 +1,13 @@
 from copy import deepcopy
 
-EXP_NAME = None
+EXP_NAME = 'DUMMY'
 
 #MOD_PATH    = 'resources/train_32k_LG/_ep504_tr0.57_val0.62' 
 #TST_IDXS_PATH = 'resources/train_32k_LG/tst_idxs'
-MOD_PATH      = 'resources/public/model/bignn_mpuntie8_resblock2_hidden32_ep174' #'resources/train_32k/_ep174_tr0.56_val0.61'
+MOD_PATH      = None #'../resources/private/train_32k/_ep174_tr0.56_val0.61'
 TST_IDXS_PATH = None #'resources/train_32k/tst_idxs'
  
-USE_GPU       = False
+USE_GPU       = True
 MAX_TST_PROGS = 128
 
 ###############

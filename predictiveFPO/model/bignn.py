@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from collections import OrderedDict
 
-from params import *
+from config.params import *
 import sys
 
 #from inference  import *
