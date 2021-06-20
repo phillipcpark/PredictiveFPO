@@ -1,7 +1,7 @@
 import numpy as np
 from config.params import *
 from common.graph_helper import batch_graphs_from_idxs  
-from common.otc import *
+from common.otc import * 
 from common.metrics import *
 from sim.input_helper import load_inputs, pad_inputs 
 from sim.prog_sim import sim_prog

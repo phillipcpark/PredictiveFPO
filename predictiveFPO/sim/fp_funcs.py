@@ -1,6 +1,5 @@
-import mpmath
 from mpmath import mp
-import sys
+
 
 # number of bits for mantissa, as understood by mpmath 
 def get_mant_prec(prec):

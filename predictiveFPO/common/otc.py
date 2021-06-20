@@ -1,6 +1,5 @@
 from config.params import *
-from numpy import random as rand
-import numpy as np
+from numpy import random as rand, argsort
 
 #
 # helpers for checking, comparing, and assessing operation type configurations,
@@ -61,7 +60,7 @@ def sort_otcs_by_score(otcs, exec_trace, write_result):
                 score += otc[nidx]
         scores.append(score) 
 
-    sort_idxs = np.argsort(scores)
+    sort_idxs = argsort(scores)
     sorted_otcs = [otcs[idx] for idx in sort_idxs]
     
     return sorted_otcs

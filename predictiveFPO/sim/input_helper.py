@@ -1,6 +1,6 @@
 import csv
 from mpmath import mp
-from common.otc import *
+from common.otc import is_const
 
 #
 def pad_inputs(exec_list, ins):

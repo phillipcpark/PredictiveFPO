@@ -43,8 +43,8 @@ if __name__ == '__main__':
 
     ds    = ld_pfpo_ds(sys.argv[1])   
     model = load_bignn(MOD_PATH)
-    train_bignn(model, ds)
-    #test_bignn(ds, sys.argv[1], model)
+    #train_bignn(model, ds)
+    test_bignn(ds, sys.argv[1], model)
 
 
 

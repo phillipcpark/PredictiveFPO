@@ -1,7 +1,8 @@
 import csv
 
+from numpy import arange
 from config.params import *
-from common.otc import *
+from common.otc import is_const, is_unary
 from random import shuffle
 
 # 
@@ -77,7 +78,7 @@ def ld_pfpo_ds(path):
     g_idxs.append(curr_g_idx)
 
     # shuffle 
-    shuff_idxs = np.arange(len(feats)) 
+    shuff_idxs = arange(len(feats)) 
     shuffle(shuff_idxs)
 
     return {'g_edges':g_edges, 'feats':feats, 'labels':labels, 'unary_masks':unary_masks, 'g_idxs':g_idxs, 'shuff_idxs':shuff_idxs, 'exec_lists':exec_lists}

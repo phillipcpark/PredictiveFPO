@@ -1,10 +1,8 @@
 from config.params import *
 
-import mpmath
 from mpmath import mp
 from collections import Counter
-import numpy as np
-import sys
+from numpy import amax, argmax
 
 #
 def prec_recall(predicts, labels):
@@ -25,13 +23,13 @@ def prec_recall(predicts, labels):
         pred_class = None
 
         if (USE_PRED_THRESH):
-            max_prob   = np.amax(predicts.detach().numpy()[p_idx])
+            max_prob   = amax(predicts.detach().numpy()[p_idx])
             if (max_prob >= PRED_THRESH):
-                pred_class = np.argmax(predicts[p_idx].detach().numpy())       
+                pred_class = argmax(predicts[p_idx].detach().numpy())       
             else:
                 pred_class = 0
         else:
-            pred_class = np.argmax(predicts[p_idx].detach().numpy()) 
+            pred_class = argmax(predicts[p_idx].detach().numpy()) 
 
         if (pred_class == gt):
             correct[pred_class] += 1

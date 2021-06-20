@@ -2,15 +2,11 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-import dgl
+from dgl import topological_nodes_generator
 from copy import deepcopy
-
 from collections import OrderedDict
 
 from config.params import *
-import sys
-
-#from inference  import *
 
 
 #
@@ -154,11 +150,11 @@ class fwd_mpgnn(nn.Module):
     def forward(self, graph, use_gpu):
         if (use_gpu):
             with th.cuda.device(0):
-                fwd_topo_order = dgl.topological_nodes_generator(graph)  
+                fwd_topo_order = topological_nodes_generator(graph)  
                 fwd_topo_order = [node_front.to(th.device("cuda:0")) for node_front in fwd_topo_order]     
                 graph.prop_nodes(fwd_topo_order, self.msg_func, self.redux_func, self.apply_func) 
         else:
-            fwd_topo_order = dgl.topological_nodes_generator(graph)  
+            fwd_topo_order = topological_nodes_generator(graph)  
             graph.prop_nodes(fwd_topo_order, self.msg_func, self.redux_func, self.apply_func) 
         return graph.ndata['fwd_node_embeds'] 
 
@@ -254,12 +250,12 @@ class bwd_mpgnn(nn.Module):
     def forward(self, graph, use_gpu): 
         if (use_gpu):
             with th.cuda.device(0):
-                bwd_topo_order = dgl.topological_nodes_generator(graph)
+                bwd_topo_order = topological_nodes_generator(graph)
                 bwd_topo_order = [node_front.to(th.device("cuda:0")) for node_front in bwd_topo_order]
                 graph.prop_nodes(bwd_topo_order, self.msg_func, self.redux_func, self.apply_func)        
 
         else:
-            bwd_topo_order = dgl.topological_nodes_generator(graph)
+            bwd_topo_order = topological_nodes_generator(graph)
             graph.prop_nodes(bwd_topo_order, self.msg_func, self.redux_func, self.apply_func)        
 
         return graph.ndata['bwd_node_embeds'] 
@@ -358,8 +354,8 @@ class bignn(nn.Module):
     # 
     def forward(self, graph, use_gpu):
         rev_graph      = graph.reverse(share_ndata=True, share_edata=True) 
-        fwd_topo_order = dgl.topological_nodes_generator(graph)
-        rev_topo_order = dgl.topological_nodes_generator(rev_graph)
+        fwd_topo_order = topological_nodes_generator(graph)
+        rev_topo_order = topological_nodes_generator(rev_graph)
 
         # vertices are routed to different bignns, based on depth 
         curr_fwd_depth = curr_bwd_depth = 0

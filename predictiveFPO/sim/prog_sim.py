@@ -1,5 +1,5 @@
-from sim.fp_funcs import * 
-from common.otc import *
+from common.otc import is_const
+import sim.fp_funcs as fpf
 
 #
 # Simulates statically defined program and returns scalar result
@@ -18,7 +18,7 @@ def sim_prog(insns, write_result, inputs, otc):
         precision = otc[insn_idx]
 
         if (is_const):
-            result = p_functions[func_type](inputs[insn_idx], precision)           
+            result = fpf.p_functions[func_type](inputs[insn_idx], precision)           
             results[result_id] = {'val':result,
                                   'prec':precision}
         else:
@@ -33,7 +33,7 @@ def sim_prog(insns, write_result, inputs, otc):
             #transcendental
             else:
                 precision = otc[insn_idx]                   
-            result = p_functions[func_type](l_operand, r_operand, precision)          
+            result = fpf.p_functions[func_type](l_operand, r_operand, precision)          
 
             #set precision if variable
             if (write_result[insn_idx]):
