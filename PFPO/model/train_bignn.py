@@ -160,6 +160,15 @@ def train_bignn(gnn, ds, config):
             for ex_idx in val_idxs:
                 val_writer.write(str(ex_idx) + "\n") 
             val_writer.close()           
+
+    # write test idxs to experiment directory
+    tst_idxs   = [ds['shuff_idxs'][i] for i in range(bat_count*bat_sz + valid_sz, len(ds['feats']))]
+    tst_writer = open(config['experiment_path'] + "/tst_idxs", 'w+')    
+
+    for ex_idx in tst_idxs:
+        tst_writer.write(str(ex_idx) + "\n") 
+    tst_writer.close()           
+
     return gnn 
 
 

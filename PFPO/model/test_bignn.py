@@ -9,30 +9,25 @@ import torch as th
 
 #
 def test_bignn(ds, inputs_dir, gnn, config):         
-    example_count = len(ds['feats'])
-    bat_sz        = config['training']['batch_sz']
-    tr_bat_count  = int((example_count * config['training']['train_ds_proportion']) / bat_sz) 
-    valid_sz      = int(example_count * config['training']['validation_ds_proportion'])  
-
     # load test_idxs if loading pretrained from disk
     tst_idxs = []
-    if not(config['pretrained']['model_path'] == None):      
+    if config['pretrained']['model_path'] is None:
+        raise ValueError('Pretrained model path must be provided for testing')
+    if config['pretrained']['tst_idxs_path'] is None:
+        raise ValueError('Pretrained model path must be provided for testing')
+
+    else:
         tst_idxs_path = config['pretrained']['tst_idxs_path']
         if not (tst_idxs_path is None):
             with open(tst_idxs_path, 'r') as idxs_f:        
                 for ex_idx in idxs_f:
                     tst_idxs.append(int(ex_idx)) 
                 idxs_f.close()
+        # entire dataset is assumed to be test examples
         else:
             tst_idxs = list(np.arange(len(ds['feats'])))
-    else:
-        tst_idxs   = [ds['shuff_idxs'][i] for i in range(tr_bat_count*BAT_SZ + valid_sz, len(ds['feats']))]
-        tst_writer = open(config['experiment_path'] + "/tst_idxs", 'w+')    
 
-        for ex_idx in tst_idxs:
-            tst_writer.write(str(ex_idx) + "\n") 
-        tst_writer.close()           
-
+    
     # eval metrics 
     prec_freq_deltas = {32:[], 64:[], 80:[]}
     accepted_count   =  0
