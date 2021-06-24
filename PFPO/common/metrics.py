@@ -1,30 +1,28 @@
-from config.params import *
-
 from mpmath import mp
 from collections import Counter
 from numpy import amax, argmax
 
 #
-def prec_recall(predicts, labels):
+def prec_recall(predicts, labels, classes, ignore_class, pred_thresh=None):
     correct   = {}
     incorrect = {}
     true      = {0:0, 1:0} 
 
-    for c in range(CLASSES):
+    for c in range(classes):
         correct[c] = 0
         incorrect[c] = 0
 
     for p_idx in range(len(predicts)):
         gt   = int(labels[p_idx].detach().numpy()) 
 
-        if (gt == IGNORE_CLASS):
+        if (gt == ignore_class):
             continue 
         true[gt]  += 1
         pred_class = None
 
-        if (USE_PRED_THRESH):
+        if not(pred_thresh is None):
             max_prob   = amax(predicts.detach().numpy()[p_idx])
-            if (max_prob >= PRED_THRESH):
+            if (max_prob >= pred_thresh):
                 pred_class = argmax(predicts[p_idx].detach().numpy())       
             else:
                 pred_class = 0
@@ -38,7 +36,7 @@ def prec_recall(predicts, labels):
 
     prec = {}
     rec  = {}
-    for c in range(CLASSES):
+    for c in range(classes):
         if (true[c] == 0):
             if (incorrect[c] == 0):
                 prec[c] = 1.0
@@ -67,19 +65,19 @@ def relative_error(val_num, val_denom):
 
 
 # see if error sample is acceptable
-def accept_err(errs, or_thresh=None):
+def accept_err(errs, thresh, accept_proportion):
     sz        = len(errs)
     gt_thresh = 0
-    max_count = int(sz * (1.0 - err_accept_prop))
+    max_count = int(sz * (1.0 - accept_proportion))
 
-    accept_thresh = err_thresh if or_thresh==None else or_thresh
+    accept_thresh = thresh
 
     for err in errs:       
         if (err > accept_thresh):
             gt_thresh += 1
 
     prop_gt_thresh = float(gt_thresh) / float(sz) 
-    if (prop_gt_thresh >= (1.0 - err_accept_prop)):
+    if (prop_gt_thresh >= (1.0 - accept_proportion)):
         return False, prop_gt_thresh
     return True, prop_gt_thresh
 

@@ -1,5 +1,39 @@
-from config.params import *
 from numpy import random as rand, argsort
+from copy import deepcopy
+
+# parameters and encodings of operations and precision
+CONST_PREC = 64
+PRECS      = {32:0, 64:1, 80:2}
+PRECS_INV  = {0:32, 1:64, 2:80}
+
+OPS = {'CONST':0,
+       'ADD':1, 
+       'SUB':2, 
+       'MUL':3, 
+       'DIV':4, 
+       'SIN':5, 
+       'COS':6,
+       'TAN':7,
+       'ASIN':8,
+       'ACOS':9,
+       'ATAN':10,
+       'SQRT':11,
+       'POW':12 } 
+
+# 1-hot vector encoding for model 
+OP_ENC_DIM = len(OPS.keys())*len(PRECS.keys()) 
+OP_ENC     = {} 
+
+curr_enc = [1.0] + [0.0 for i in range(OP_ENC_DIM-1)]
+for op in OPS.keys():
+    curr_op_encs = {} 
+
+    for prec in PRECS.keys():
+        curr_op_encs[PRECS[prec]] = deepcopy(curr_enc) 
+        curr_enc.insert(0, 0.0)
+        curr_enc.pop()
+    OP_ENC[OPS[op]] = curr_op_encs
+
 
 #
 # helpers for checking, comparing, and assessing operation type configurations,
@@ -8,19 +42,19 @@ from numpy import random as rand, argsort
 
 #
 def is_const(opcode):
-    if (opcode == ops['CONST']):
+    if (opcode == OPS['CONST']):
         return True
     return False
 
 #
 def is_unary(opcode):
-    if (opcode >= ops['SIN']):
+    if (opcode >= OPS['SIN']):
         return True
     return False
 
 #
 def is_func(opcode):
-    if (opcode >= ops['SIN']):
+    if (opcode >= OPS['SIN']):
         return True
     else:
         return False 
@@ -29,11 +63,10 @@ def is_func(opcode):
 def tune_prec(orig, tune_rec):
     rec = None
 
-    if (COARSE_TUNE):
-        if (tune_rec == 1):
-            rec = -2  
-        else:
-            rec = 0
+    if (tune_rec == 1):
+        rec = -2  
+    else:
+        rec = 0
     if rec < 1:
         return max(0, orig+rec)
     else:

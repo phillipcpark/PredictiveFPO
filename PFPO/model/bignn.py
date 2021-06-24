@@ -6,8 +6,6 @@ from dgl import topological_nodes_generator
 from copy import deepcopy
 from collections import OrderedDict
 
-from config.params import *
-
 
 #
 # 
@@ -267,7 +265,7 @@ class bwd_mpgnn(nn.Module):
 #
 #
 class bignn(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
+    def __init__(self, in_dim, hidden_dim, out_dim, tie_mp_params, mp_steps):
         super(bignn, self).__init__()
 
         self.act = nn.Tanh()
@@ -276,8 +274,10 @@ class bignn(nn.Module):
         self.bwd_nets    = nn.ModuleList([bwd_mpgnn(in_dim, hidden_dim)])
         self.comb_embeds = nn.ModuleList([resnet(2*hidden_dim, 2*hidden_dim, hidden_dim)])
 
-        if not(TIE_MP_PARAMS):        
-            for mp_step in range(MP_STEPS-1):
+        self.tie_mp_params = tie_mp_params
+        self.mp_steps      = mp_steps
+        if not(tie_mp_params):        
+            for mp_step in range(mp_steps-1):
                 self.fwd_nets.append(fwd_mpgnn(in_dim, hidden_dim))
                 self.bwd_nets.append(bwd_mpgnn(in_dim, hidden_dim))         
                 self.comb_embeds.append(resnet(2*hidden_dim, 2*hidden_dim, hidden_dim))
@@ -285,8 +285,8 @@ class bignn(nn.Module):
 
     # 
     def load_hier_state(self, flat_dict):
-        if not(MP_STEPS < 10):
-            raise ValueError('MP_STEPS must be < 10 to load model; TODO: update parser to handle arbitrary # of digits')
+        if not(self.mp_steps < 10):
+            raise ValueError('mp_steps must be < 10 to load model; TODO: update parser to handle arbitrary # of digits')
 
         fwd_sd  = OrderedDict() 
         bwd_sd  = OrderedDict()
@@ -306,7 +306,7 @@ class bignn(nn.Module):
             else:
                 raise ValueError('Unrecognized key encountered when loading model')
 
-        for fwd_idx in range(MP_STEPS):             
+        for fwd_idx in range(self.mp_steps):             
             step_sd = OrderedDict()
 
             for k, v in fwd_sd.items():
@@ -321,7 +321,7 @@ class bignn(nn.Module):
 
             self.fwd_nets[fwd_idx].load_state_dict(step_sd, strict=True)
 
-        for bwd_idx in range(MP_STEPS):             
+        for bwd_idx in range(self.mp_steps):             
             step_sd = OrderedDict()
 
             for k, v in bwd_sd.items():
@@ -337,7 +337,7 @@ class bignn(nn.Module):
 
         pred_net_sd = OrderedDict()
 
-        for comb_idx in range(MP_STEPS):
+        for comb_idx in range(self.mp_steps):
             step_sd = OrderedDict()
             for k, v in comb_sd.items():
                 step_id = int(k.split('.')[0])                            
@@ -394,11 +394,11 @@ class bignn(nn.Module):
         bwd_embed = self.bwd_nets[0](rev_graph, use_gpu)
         comb      = self.comb_embeds[0](th.cat((fwd_embed, bwd_embed), axis=-1))
  
-        for mp_step in range(MP_STEPS-1):
+        for mp_step in range(self.mp_steps-1):
             graph.ndata['fwd_node_embeds']     = comb
             rev_graph.ndata['bwd_node_embeds'] = comb
 
-            step_net_idx = 0 if TIE_MP_PARAMS else mp_step
+            step_net_idx = 0 if self.tie_mp_params else mp_step
 
             fwd_embed = self.fwd_nets[step_net_idx](graph, use_gpu)
             bwd_embed = self.bwd_nets[step_net_idx](rev_graph, use_gpu)

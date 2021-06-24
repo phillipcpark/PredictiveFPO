@@ -1,7 +1,6 @@
 from dgl import DGLGraph, batch
-from config.params import *
-from common.session import get_dev
-
+from common.pfpo_utils import get_dev
+import common.otc as otc
 from torch import tensor
 
 # 
@@ -33,7 +32,7 @@ def batch_graphs_from_idxs(idxs, g_edges, unary_masks, g_idxs, feats, use_gpu, l
         g_idx    = g_idxs[ex_idx]
         edges    = g_edges[g_idx] 
 
-        ex_feats = [OP_ENC[feat[0]][feat[1]] for feat in feats[ex_idx]]
+        ex_feats = [otc.OP_ENC[feat[0]][feat[1]] for feat in feats[ex_idx]]
         ex_graph = create_dgl_graph(g_edges[g_idx],\
                                     ex_feats,\
                                     unary_masks[g_idx],use_gpu)         

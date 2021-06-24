@@ -1,0 +1,29 @@
+{
+  "experiment_path": "DUMMY",
+  "use_gpu": false,
+  "pretrained": { 
+                  "model_path": "../resources/public/model/bignn_mpuntie8_resblock2_hidden32_ep174",
+                  "tst_idxs_path": null
+                }, 
+  "model": {
+             "hidden_dim": 32,
+             "prediction_thresh": 0.56,
+             "message_passing_steps": 8,
+             "tie_mp_params": false,
+             "classes": 2,
+             "ignore_class": 20
+           },
+  "training": { 
+                "batch_sz": 128,
+                "epochs": 4,
+                "train_ds_proportion": 0.75,
+                "validation_ds_proportion": 0.125,
+                "learn_rate": 0.1,
+                "use_class_bal": true
+              },
+  "testing": {
+               "max_test_count": 8,
+               "error_thresh": 0.0000001,
+               "accept_proportion": 0.99
+             }
+}
